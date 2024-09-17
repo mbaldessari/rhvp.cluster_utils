@@ -47,6 +47,10 @@
       - "component = server"
   register: vault_pods_list
 
+- name: Debug vault pod list
+  ansible.builtin.debug:
+    msg: "{{ vault_pods_list }}"
+
 - name: "Get pods"
   ansible.builtin.set_fact:
     vault_pods: "{{ vault_pods + [item.metadata.name] }}"
