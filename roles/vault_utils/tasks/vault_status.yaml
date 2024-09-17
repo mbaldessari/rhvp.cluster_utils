@@ -56,6 +56,15 @@
   vars:
     vault_pods: []
 
+- name: Debug vault pods
+  ansible.builtin.debug:
+    msg: "{{ vault_pods }}"
+
 - name: "Followers"
   ansible.builtin.set_fact:
     followers: "{{ vault_pods | difference(vault_pod) }}"
+
+- name: Debug followers
+  ansible.builtin.debug:
+    msg: "{{ followers }}"
+
