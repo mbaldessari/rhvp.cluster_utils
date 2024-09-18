@@ -66,7 +66,7 @@
 
 - name: "Followers"
   ansible.builtin.set_fact:
-    followers: "{{ vault_pods | difference(vault_pod) }}"
+    followers: "{{ vault_pods | ansible.builtin.difference([vault_pod]) }}"
 
 - name: Debug followers
   ansible.builtin.debug:
