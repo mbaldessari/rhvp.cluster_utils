@@ -6,9 +6,6 @@ name: Ansible unit tests
 # https://help.github.com/en/articles/workflow-syntax-for-github-actions
 #
 
-#############################
-# Start the job on all push #
-#############################
 on: [push, pull_request]
 
 ###############
@@ -16,7 +13,6 @@ on: [push, pull_request]
 ###############
 jobs:
   ansible_unittests:
-    # Name the Job
     name: Ansible unit tests
     strategy:
       matrix:
@@ -28,14 +24,9 @@ jobs:
     # Load all steps #
     ##################
     steps:
-      ##########################
-      # Checkout the code base #
-      ##########################
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
-          # Full git history is needed to get a proper list of changed files within `super-linter`
-          fetch-depth: 0
           path: ansible_collections/rhvp/cluster_utils
 
       - name: Set up Python ${{ matrix.python-version }}
@@ -50,6 +41,9 @@ jobs:
 
       - name: Run make ansible-unittest
         run: |
+          set -e
+          echo "Path:"
+          pwd
           make ansible-unittest
 
       - name: Run make ansible-sanitytest
