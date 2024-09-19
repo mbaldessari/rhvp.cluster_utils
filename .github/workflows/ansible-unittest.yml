@@ -44,8 +44,11 @@ jobs:
           set -e
           echo "Path:"
           pwd
+          ls
+          cd ansible_collections/rhvp/cluster_utils
           make ansible-unittest
 
       - name: Run make ansible-sanitytest
         run: |
+          cd ansible_collections/rhvp/cluster_utils
           make ansible-sanitytest
