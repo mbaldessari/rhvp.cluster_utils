@@ -141,6 +141,9 @@ from ansible_collections.rhvp.cluster_utils.plugins.module_utils.load_secrets_v1
 from ansible_collections.rhvp.cluster_utils.plugins.module_utils.load_secrets_v2 import (
     LoadSecretsV2,
 )
+from ansible_collections.rhvp.cluster_utils.plugins.module_utils.load_secrets_v3 import (
+    LoadSecretsV3,
+)
 
 try:
     import yaml
@@ -193,7 +196,9 @@ def run(module):
         module.fail_json("Both values_secrets and values_secrets_plaintext are unset")
 
     version = get_version(syaml)
-    if version == "2.0":
+    if version == "3.0":
+        secret_obj = LoadSecretsV3(module, syaml, namespace, pod)
+    elif version == "2.0":
         secret_obj = LoadSecretsV2(module, syaml, namespace, pod)
     elif version == "1.0":
         secret_obj = LoadSecretsV1(
@@ -205,7 +210,6 @@ def run(module):
             values_secret_template,
             check_missing_secrets,
         )
-
     else:
         secret_obj = None
         module.fail_json(f"Version {version} is currently not supported")
