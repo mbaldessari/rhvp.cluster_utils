@@ -22,7 +22,7 @@ import json
 import os
 import unittest
 from unittest import mock
-from unittest.mock import call, patch
+from unittest.mock import patch
 
 from ansible.module_utils import basic
 from ansible.module_utils.common.text.converters import to_bytes
@@ -64,7 +64,6 @@ def fail_json(*args, **kwargs):
 
 @mock.patch("getpass.getpass")
 class TestVaultLoadSecretsV3(unittest.TestCase):
-
     def setUp(self):
         self.mock_module_helper = patch.multiple(
             basic.AnsibleModule, exit_json=exit_json, fail_json=fail_json
@@ -92,25 +91,33 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         secrets = load_secrets_v3.SecretsV3Base(module, syaml)
 
         # Test file+base64:// parsing
-        field_type, param, is_optional = secrets._parse_field_instruction("file+base64://path/to/file")
+        field_type, param, is_optional = secrets._parse_field_instruction(
+            "file+base64://path/to/file"
+        )
         self.assertEqual(field_type, "file_base64")
         self.assertEqual(param, "path/to/file")
         self.assertFalse(is_optional)
 
         # Test regular file:// parsing still works
-        field_type, param, is_optional = secrets._parse_field_instruction("file://path/to/file")
+        field_type, param, is_optional = secrets._parse_field_instruction(
+            "file://path/to/file"
+        )
         self.assertEqual(field_type, "file")
         self.assertEqual(param, "path/to/file")
         self.assertFalse(is_optional)
 
         # Test ini:// parsing
-        field_type, param, is_optional = secrets._parse_field_instruction("ini://~/.aws/credentials:default:aws_access_key_id")
+        field_type, param, is_optional = secrets._parse_field_instruction(
+            "ini://~/.aws/credentials:default:aws_access_key_id"
+        )
         self.assertEqual(field_type, "ini")
         self.assertEqual(param, "~/.aws/credentials:default:aws_access_key_id")
         self.assertFalse(is_optional)
 
         # Test static value
-        field_type, param, is_optional = secrets._parse_field_instruction("static_value")
+        field_type, param, is_optional = secrets._parse_field_instruction(
+            "static_value"
+        )
         self.assertEqual(field_type, "static")
         self.assertEqual(param, "static_value")
         self.assertFalse(is_optional)
@@ -126,9 +133,9 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         instruction = f"file+base64://{self.test_file}"
 
         # Get the expected base64 content
-        with open(self.test_file, 'rb') as f:
+        with open(self.test_file, "rb") as f:
             file_content = f.read()
-        expected_b64 = base64.b64encode(file_content).decode('utf-8')
+        expected_b64 = base64.b64encode(file_content).decode("utf-8")
 
         result = secrets._get_field_value("test_secret", "test_field", instruction)
         self.assertEqual(result, expected_b64)
@@ -142,13 +149,17 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
 
         # Test valid file+base64:// instruction
         instruction = f"file+base64://{self.test_file}"
-        result = secrets._validate_field("test_secret", "test_field", instruction, "vault")
+        result = secrets._validate_field(
+            "test_secret", "test_field", instruction, "vault"
+        )
         self.assertTrue(result[0])
         self.assertEqual(result[1], "")
 
         # Test invalid file+base64:// instruction (non-existent file)
         instruction = "file+base64://nonexistent/file"
-        result = secrets._validate_field("test_secret", "test_field", instruction, "vault")
+        result = secrets._validate_field(
+            "test_secret", "test_field", instruction, "vault"
+        )
         self.assertFalse(result[0])
         self.assertIn("file not found", result[1])
 
@@ -161,13 +172,17 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
 
         # Test valid file+base64:// instruction with test file
         instruction = f"file+base64://{self.test_file}"
-        result = secrets._validate_field("test_secret", "test_field", instruction, "vault")
+        result = secrets._validate_field(
+            "test_secret", "test_field", instruction, "vault"
+        )
         self.assertTrue(result[0])
         self.assertEqual(result[1], "")
 
         # Test invalid file+base64:// instruction (non-existent file)
         instruction = "file+base64://nonexistent/file"
-        result = secrets._validate_field("test_secret", "test_field", instruction, "vault")
+        result = secrets._validate_field(
+            "test_secret", "test_field", instruction, "vault"
+        )
         self.assertFalse(result[0])
         self.assertIn("file not found", result[1])
 
@@ -180,12 +195,14 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
 
         # Get value from file+base64:// method
         file_base64_instruction = f"file+base64://{self.test_file}"
-        file_base64_value = secrets._get_field_value("test_secret", "test_field", file_base64_instruction)
+        file_base64_value = secrets._get_field_value(
+            "test_secret", "test_field", file_base64_instruction
+        )
 
         # Read the file content directly for comparison
-        with open(self.test_file, 'rb') as f:
+        with open(self.test_file, "rb") as f:
             file_content = f.read()
-        expected_b64 = base64.b64encode(file_content).decode('utf-8')
+        expected_b64 = base64.b64encode(file_content).decode("utf-8")
 
         # Verify the base64 value matches expected encoding
         self.assertEqual(file_base64_value, expected_b64)
@@ -206,7 +223,9 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         secrets = load_secrets_v3.SecretsV3Base(module, syaml)
 
         # Test full format: file:section:key
-        file_path, section, key = secrets._parse_ini_spec("~/.aws/credentials:default:aws_access_key_id")
+        file_path, section, key = secrets._parse_ini_spec(
+            "~/.aws/credentials:default:aws_access_key_id"
+        )
         self.assertEqual(file_path, "~/.aws/credentials")
         self.assertEqual(section, "default")
         self.assertEqual(key, "aws_access_key_id")
@@ -218,7 +237,9 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         self.assertEqual(key, "region")
 
         # Test custom section
-        file_path, section, key = secrets._parse_ini_spec("/etc/config.ini:database:password")
+        file_path, section, key = secrets._parse_ini_spec(
+            "/etc/config.ini:database:password"
+        )
         self.assertEqual(file_path, "/etc/config.ini")
         self.assertEqual(section, "database")
         self.assertEqual(key, "password")
@@ -253,10 +274,10 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
     def test_read_ini_value(self, getpass):
         """Test reading values from INI files"""
         # Create a test ini file
-        import tempfile
         import os
+        import tempfile
 
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.ini', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".ini", delete=False) as f:
             f.write("[default]\n")
             f.write("api_key=test_api_key\n")
             f.write("region=us-east-1\n")
@@ -289,10 +310,10 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
     def test_get_field_value_ini(self, getpass):
         """Test getting field value for ini:// instructions"""
         # Create a test ini file
-        import tempfile
         import os
+        import tempfile
 
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.ini', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".ini", delete=False) as f:
             f.write("[default]\n")
             f.write("access_key=AKIAIOSFODNN7EXAMPLE\n")
             f.write("secret_key=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY\n")
@@ -329,10 +350,10 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
     def test_validate_field_ini(self, getpass):
         """Test validation of ini:// field instructions"""
         # Create a test ini file
-        import tempfile
         import os
+        import tempfile
 
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.ini', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".ini", delete=False) as f:
             f.write("[default]\ntest_key=test_value\n")
             ini_file_path = f.name
 
@@ -344,19 +365,25 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
 
             # Test valid ini:// instruction
             instruction = f"ini://{ini_file_path}:default:test_key"
-            result = secrets._validate_field("test_secret", "test_field", instruction, "vault")
+            result = secrets._validate_field(
+                "test_secret", "test_field", instruction, "vault"
+            )
             self.assertTrue(result[0])
             self.assertEqual(result[1], "")
 
             # Test invalid ini:// instruction (non-existent file)
             instruction = "ini:///nonexistent/file.ini:default:key"
-            result = secrets._validate_field("test_secret", "test_field", instruction, "vault")
+            result = secrets._validate_field(
+                "test_secret", "test_field", instruction, "vault"
+            )
             self.assertFalse(result[0])
             self.assertIn("ini file not found", result[1])
 
             # Test invalid ini:// instruction (bad format)
             instruction = "ini://invalid_format"
-            result = secrets._validate_field("test_secret", "test_field", instruction, "vault")
+            result = secrets._validate_field(
+                "test_secret", "test_field", instruction, "vault"
+            )
             self.assertFalse(result[0])
             self.assertIn("invalid ini specification", result[1])
 
@@ -393,7 +420,7 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         syaml = {
             "version": "3.0",
             "backingStore": "vault",
-            "secrets": {"test_secret": {"field1": "value1"}}
+            "secrets": {"test_secret": {"field1": "value1"}},
         }
         secrets = load_secrets_v3.SecretsV3Base(module, syaml)
 
@@ -409,7 +436,7 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         syaml = {
             "version": "3.0",
             "backingStore": "consul",
-            "secrets": {"test_secret": {"field1": "value1"}}
+            "secrets": {"test_secret": {"field1": "value1"}},
         }
         secrets = load_secrets_v3.SecretsV3Base(module, syaml)
 
@@ -417,16 +444,15 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         result = secrets._validate_secrets()
         self.assertFalse(result[0])
         self.assertIn("Unsupported backingStore: consul", result[1])
-        self.assertIn("Supported values: vault, kubernetes, aws-secrets-manager", result[1])
+        self.assertIn(
+            "Supported values: vault, kubernetes, aws-secrets-manager", result[1]
+        )
 
     def test_validate_backing_store_default_works(self, getpass):
         """Test that validation works when backingStore is not specified (uses default)"""
         # Create a mock module and secrets instance
         module = mock.MagicMock()
-        syaml = {
-            "version": "3.0",
-            "secrets": {"test_secret": {"field1": "value1"}}
-        }
+        syaml = {"version": "3.0", "secrets": {"test_secret": {"field1": "value1"}}}
         secrets = load_secrets_v3.SecretsV3Base(module, syaml)
 
         # Test validation passes with default backing store
@@ -442,7 +468,7 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         syaml = {
             "version": "3.0",
             "backingStore": "kubernetes",
-            "secrets": {"test_secret": {"field1": "value1"}}
+            "secrets": {"test_secret": {"field1": "value1"}},
         }
         secrets = load_secrets_v3.SecretsV3Base(module, syaml)
 
@@ -458,7 +484,7 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         syaml = {
             "version": "3.0",
             "backingStore": "kubernetes",
-            "secrets": {"test_secret": {"password": "generate:strong"}}
+            "secrets": {"test_secret": {"password": "generate:strong"}},
         }
         secrets = load_secrets_v3.SecretsV3Base(module, syaml)
 
@@ -475,7 +501,7 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         syaml = {
             "version": "3.0",
             "backingStore": "kubernetes",
-            "secrets": {"test_secret": {"targets": ["hub"], "field1": "value1"}}
+            "secrets": {"test_secret": {"targets": ["hub"], "field1": "value1"}},
         }
         secrets = load_secrets_v3.SecretsV3Base(module, syaml)
 
@@ -491,7 +517,7 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         syaml = {
             "version": "3.0",
             "backingStore": "vault",
-            "secrets": {"test_secret": {"namespaces": ["default"], "field1": "value1"}}
+            "secrets": {"test_secret": {"namespaces": ["default"], "field1": "value1"}},
         }
         secrets = load_secrets_v3.SecretsV3Base(module, syaml)
 
@@ -509,7 +535,9 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         syaml = {
             "version": "3.0",
             "backingStore": "kubernetes",
-            "secrets": {"test_secret": {"namespaces": "app-namespace", "field1": "value1"}}
+            "secrets": {
+                "test_secret": {"namespaces": "app-namespace", "field1": "value1"}
+            },
         }
         secrets = load_secrets_v3.SecretsV3Base(module, syaml)
         result = secrets._validate_secrets()
@@ -519,7 +547,12 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         syaml = {
             "version": "3.0",
             "backingStore": "kubernetes",
-            "secrets": {"test_secret": {"namespaces": ["default", "app1", "app2"], "field1": "value1"}}
+            "secrets": {
+                "test_secret": {
+                    "namespaces": ["default", "app1", "app2"],
+                    "field1": "value1",
+                }
+            },
         }
         secrets = load_secrets_v3.SecretsV3Base(module, syaml)
         result = secrets._validate_secrets()
@@ -529,7 +562,7 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         syaml = {
             "version": "3.0",
             "backingStore": "kubernetes",
-            "secrets": {"test_secret": {"namespaces": "", "field1": "value1"}}
+            "secrets": {"test_secret": {"namespaces": "", "field1": "value1"}},
         }
         secrets = load_secrets_v3.SecretsV3Base(module, syaml)
         result = secrets._validate_secrets()
@@ -540,7 +573,7 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         syaml = {
             "version": "3.0",
             "backingStore": "kubernetes",
-            "secrets": {"test_secret": {"namespaces": [], "field1": "value1"}}
+            "secrets": {"test_secret": {"namespaces": [], "field1": "value1"}},
         }
         secrets = load_secrets_v3.SecretsV3Base(module, syaml)
         result = secrets._validate_secrets()
@@ -561,9 +594,9 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
                     "namespaces": "default",
                     "labels": {"app": "myapp", "env": "prod"},
                     "annotations": {"description": "test secret"},
-                    "field1": "value1"
+                    "field1": "value1",
                 }
-            }
+            },
         }
         secrets = load_secrets_v3.SecretsV3Base(module, syaml)
         result = secrets._validate_secrets()
@@ -573,7 +606,13 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         syaml = {
             "version": "3.0",
             "backingStore": "kubernetes",
-            "secrets": {"test_secret": {"namespaces": "default", "labels": "invalid", "field1": "value1"}}
+            "secrets": {
+                "test_secret": {
+                    "namespaces": "default",
+                    "labels": "invalid",
+                    "field1": "value1",
+                }
+            },
         }
         secrets = load_secrets_v3.SecretsV3Base(module, syaml)
         result = secrets._validate_secrets()
@@ -584,7 +623,13 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         syaml = {
             "version": "3.0",
             "backingStore": "kubernetes",
-            "secrets": {"test_secret": {"namespaces": "default", "annotations": "invalid", "field1": "value1"}}
+            "secrets": {
+                "test_secret": {
+                    "namespaces": "default",
+                    "annotations": "invalid",
+                    "field1": "value1",
+                }
+            },
         }
         secrets = load_secrets_v3.SecretsV3Base(module, syaml)
         result = secrets._validate_secrets()
@@ -600,7 +645,13 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         syaml = {
             "version": "3.0",
             "backingStore": "kubernetes",
-            "secrets": {"test_secret": {"namespaces": "default", "type": "Opaque", "field1": "value1"}}
+            "secrets": {
+                "test_secret": {
+                    "namespaces": "default",
+                    "type": "Opaque",
+                    "field1": "value1",
+                }
+            },
         }
         secrets = load_secrets_v3.SecretsV3Base(module, syaml)
         result = secrets._validate_secrets()
@@ -610,7 +661,9 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         syaml = {
             "version": "3.0",
             "backingStore": "kubernetes",
-            "secrets": {"test_secret": {"namespaces": "default", "type": "", "field1": "value1"}}
+            "secrets": {
+                "test_secret": {"namespaces": "default", "type": "", "field1": "value1"}
+            },
         }
         secrets = load_secrets_v3.SecretsV3Base(module, syaml)
         result = secrets._validate_secrets()
@@ -644,9 +697,11 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
             "version": "3.0",
             "backingStore": "kubernetes",
             "settings": {"namespace": "custom-namespace"},
-            "secrets": {}
+            "secrets": {},
         }
-        k8s_secrets_custom = load_secrets_v3.LoadSecretsV3Kubernetes(module, syaml_with_settings)
+        k8s_secrets_custom = load_secrets_v3.LoadSecretsV3Kubernetes(
+            module, syaml_with_settings
+        )
         secret_config = {}
         namespaces = k8s_secrets_custom._get_namespaces_for_secret(secret_config)
         self.assertEqual(namespaces, ["custom-namespace"])
@@ -696,7 +751,7 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         syaml = {
             "version": "3.0",
             "backingStore": "aws-secrets-manager",
-            "secrets": {"test_secret": {"field1": "value1"}}
+            "secrets": {"test_secret": {"field1": "value1"}},
         }
         secrets = load_secrets_v3.SecretsV3Base(module, syaml)
 
@@ -712,7 +767,7 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         syaml = {
             "version": "3.0",
             "backingStore": "aws-secrets-manager",
-            "secrets": {"test_secret": {"password": "generate:strong"}}
+            "secrets": {"test_secret": {"password": "generate:strong"}},
         }
         secrets = load_secrets_v3.SecretsV3Base(module, syaml)
 
@@ -731,7 +786,7 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         syaml = {
             "version": "3.0",
             "backingStore": "aws-secrets-manager",
-            "secrets": {"test_secret": {"targets": ["hub"], "field1": "value1"}}
+            "secrets": {"test_secret": {"targets": ["hub"], "field1": "value1"}},
         }
         secrets = load_secrets_v3.SecretsV3Base(module, syaml)
         result = secrets._validate_secrets()
@@ -742,7 +797,7 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         syaml = {
             "version": "3.0",
             "backingStore": "aws-secrets-manager",
-            "secrets": {"test_secret": {"namespaces": ["default"], "field1": "value1"}}
+            "secrets": {"test_secret": {"namespaces": ["default"], "field1": "value1"}},
         }
         secrets = load_secrets_v3.SecretsV3Base(module, syaml)
         result = secrets._validate_secrets()
@@ -758,7 +813,9 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         syaml = {
             "version": "3.0",
             "backingStore": "aws-secrets-manager",
-            "secrets": {"test_secret": {"secretName": "custom/secret", "field1": "value1"}}
+            "secrets": {
+                "test_secret": {"secretName": "custom/secret", "field1": "value1"}
+            },
         }
         secrets = load_secrets_v3.SecretsV3Base(module, syaml)
         result = secrets._validate_secrets()
@@ -768,7 +825,7 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         syaml = {
             "version": "3.0",
             "backingStore": "aws-secrets-manager",
-            "secrets": {"test_secret": {"secretName": "", "field1": "value1"}}
+            "secrets": {"test_secret": {"secretName": "", "field1": "value1"}},
         }
         secrets = load_secrets_v3.SecretsV3Base(module, syaml)
         result = secrets._validate_secrets()
@@ -787,9 +844,9 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
             "secrets": {
                 "test_secret": {
                     "tags": {"Environment": "production", "Team": "platform"},
-                    "field1": "value1"
+                    "field1": "value1",
                 }
-            }
+            },
         }
         secrets = load_secrets_v3.SecretsV3Base(module, syaml)
         result = secrets._validate_secrets()
@@ -799,7 +856,7 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         syaml = {
             "version": "3.0",
             "backingStore": "aws-secrets-manager",
-            "secrets": {"test_secret": {"tags": "invalid", "field1": "value1"}}
+            "secrets": {"test_secret": {"tags": "invalid", "field1": "value1"}},
         }
         secrets = load_secrets_v3.SecretsV3Base(module, syaml)
         result = secrets._validate_secrets()
@@ -819,11 +876,11 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
                 "test_secret": {
                     "automaticRotation": {
                         "enabled": True,
-                        "rotationSchedule": "rate(30 days)"
+                        "rotationSchedule": "rate(30 days)",
                     },
-                    "field1": "value1"
+                    "field1": "value1",
                 }
-            }
+            },
         }
         secrets = load_secrets_v3.SecretsV3Base(module, syaml)
         result = secrets._validate_secrets()
@@ -836,9 +893,9 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
             "secrets": {
                 "test_secret": {
                     "automaticRotation": {"rotationSchedule": "rate(30 days)"},
-                    "field1": "value1"
+                    "field1": "value1",
                 }
-            }
+            },
         }
         secrets = load_secrets_v3.SecretsV3Base(module, syaml)
         result = secrets._validate_secrets()
@@ -852,9 +909,9 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
             "secrets": {
                 "test_secret": {
                     "automaticRotation": {"enabled": True},
-                    "field1": "value1"
+                    "field1": "value1",
                 }
-            }
+            },
         }
         secrets = load_secrets_v3.SecretsV3Base(module, syaml)
         result = secrets._validate_secrets()
@@ -871,7 +928,7 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
             "version": "3.0",
             "backingStore": "aws-secrets-manager",
             "awsConfig": {"prefix": "myapp/prod/"},
-            "secrets": {}
+            "secrets": {},
         }
         aws_secrets = load_secrets_v3.LoadSecretsV3AWS(module, syaml)
 
@@ -889,12 +946,16 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         syaml_no_prefix = {
             "version": "3.0",
             "backingStore": "aws-secrets-manager",
-            "secrets": {}
+            "secrets": {},
         }
-        aws_secrets_no_prefix = load_secrets_v3.LoadSecretsV3AWS(module, syaml_no_prefix)
+        aws_secrets_no_prefix = load_secrets_v3.LoadSecretsV3AWS(
+            module, syaml_no_prefix
+        )
 
         secret_config = {"secretName": "custom-name"}
-        secret_name = aws_secrets_no_prefix._get_secret_name_for_aws("database", secret_config)
+        secret_name = aws_secrets_no_prefix._get_secret_name_for_aws(
+            "database", secret_config
+        )
         self.assertEqual(secret_name, "custom-name")
 
     def test_get_secret_tags_merging(self, getpass):
@@ -907,10 +968,10 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
             "awsConfig": {
                 "defaultTags": {
                     "Environment": "production",
-                    "ManagedBy": "validated-patterns"
+                    "ManagedBy": "validated-patterns",
                 }
             },
-            "secrets": {}
+            "secrets": {},
         }
         aws_secrets = load_secrets_v3.LoadSecretsV3AWS(module, syaml)
 
@@ -918,24 +979,21 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         secret_config = {
             "tags": {
                 "Application": "myapp",
-                "Environment": "staging"  # Override default
+                "Environment": "staging",  # Override default
             }
         }
         merged_tags = aws_secrets._get_secret_tags(secret_config)
         expected_tags = {
             "Environment": "staging",  # Secret-specific takes precedence
             "ManagedBy": "validated-patterns",  # From defaults
-            "Application": "myapp"  # Secret-specific
+            "Application": "myapp",  # Secret-specific
         }
         self.assertEqual(merged_tags, expected_tags)
 
         # Test with no secret-specific tags
         secret_config = {}
         merged_tags = aws_secrets._get_secret_tags(secret_config)
-        expected_tags = {
-            "Environment": "production",
-            "ManagedBy": "validated-patterns"
-        }
+        expected_tags = {"Environment": "production", "ManagedBy": "validated-patterns"}
         self.assertEqual(merged_tags, expected_tags)
 
     def test_get_secret_kms_key_id(self, getpass):
@@ -946,7 +1004,7 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
             "version": "3.0",
             "backingStore": "aws-secrets-manager",
             "awsConfig": {"defaultKmsKeyId": "alias/default-key"},
-            "secrets": {}
+            "secrets": {},
         }
         aws_secrets = load_secrets_v3.LoadSecretsV3AWS(module, syaml)
 
@@ -964,9 +1022,11 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         syaml_no_default = {
             "version": "3.0",
             "backingStore": "aws-secrets-manager",
-            "secrets": {}
+            "secrets": {},
         }
-        aws_secrets_no_default = load_secrets_v3.LoadSecretsV3AWS(module, syaml_no_default)
+        aws_secrets_no_default = load_secrets_v3.LoadSecretsV3AWS(
+            module, syaml_no_default
+        )
         secret_config = {}
         kms_key_id = aws_secrets_no_default._get_secret_kms_key_id(secret_config)
         self.assertIsNone(kms_key_id)
@@ -980,48 +1040,34 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         secrets = load_secrets_v3.SecretsV3Base(module, syaml)
 
         # Test object form with optional=true
-        instruction = {
-            "value": "file://path/to/file",
-            "optional": True
-        }
+        instruction = {"value": "file://path/to/file", "optional": True}
         field_type, param, is_optional = secrets._parse_field_instruction(instruction)
         self.assertEqual(field_type, "file")
         self.assertEqual(param, "path/to/file")
         self.assertTrue(is_optional)
 
         # Test object form with optional=false
-        instruction = {
-            "value": "prompt:Enter password",
-            "optional": False
-        }
+        instruction = {"value": "prompt:Enter password", "optional": False}
         field_type, param, is_optional = secrets._parse_field_instruction(instruction)
         self.assertEqual(field_type, "prompt")
         self.assertEqual(param, "Enter password")
         self.assertFalse(is_optional)
 
         # Test object form without optional (defaults to false)
-        instruction = {
-            "value": "static_value"
-        }
+        instruction = {"value": "static_value"}
         field_type, param, is_optional = secrets._parse_field_instruction(instruction)
         self.assertEqual(field_type, "static")
         self.assertEqual(param, "static_value")
         self.assertFalse(is_optional)
 
         # Test various instruction types in object form
-        instruction = {
-            "value": "file+base64://path/to/binary",
-            "optional": True
-        }
+        instruction = {"value": "file+base64://path/to/binary", "optional": True}
         field_type, param, is_optional = secrets._parse_field_instruction(instruction)
         self.assertEqual(field_type, "file_base64")
         self.assertEqual(param, "path/to/binary")
         self.assertTrue(is_optional)
 
-        instruction = {
-            "value": "ini://~/.config/app.ini:default:key",
-            "optional": True
-        }
+        instruction = {"value": "ini://~/.config/app.ini:default:key", "optional": True}
         field_type, param, is_optional = secrets._parse_field_instruction(instruction)
         self.assertEqual(field_type, "ini")
         self.assertEqual(param, "~/.config/app.ini:default:key")
@@ -1035,9 +1081,7 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         secrets = load_secrets_v3.SecretsV3Base(module, syaml)
 
         # Test object form without value key
-        instruction = {
-            "optional": True
-        }
+        instruction = {"optional": True}
         with self.assertRaises(ValueError) as cm:
             secrets._parse_field_instruction(instruction)
         self.assertIn("must have 'value' key", str(cm.exception))
@@ -1051,16 +1095,15 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         secrets = load_secrets_v3.SecretsV3Base(module, syaml)
 
         # Test optional file that doesn't exist
-        instruction = {
-            "value": "file://nonexistent/file.txt",
-            "optional": True
-        }
+        instruction = {"value": "file://nonexistent/file.txt", "optional": True}
         value = secrets._get_field_value("test_secret", "test_field", instruction)
         self.assertIsNone(value)  # Should return None, not fail
 
         # Test required file that doesn't exist (should fail)
         instruction = "file://nonexistent/file.txt"
-        with self.assertRaises(AnsibleFailJson):  # module.fail_json raises AnsibleFailJson
+        with self.assertRaises(
+            AnsibleFailJson
+        ):  # module.fail_json raises AnsibleFailJson
             secrets._get_field_value("test_secret", "test_field", instruction)
 
     def test_optional_field_ini_handling(self, getpass):
@@ -1071,25 +1114,22 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         secrets = load_secrets_v3.SecretsV3Base(module, syaml)
 
         # Test optional INI file that doesn't exist
-        instruction = {
-            "value": "ini://nonexistent.ini:section:key",
-            "optional": True
-        }
+        instruction = {"value": "ini://nonexistent.ini:section:key", "optional": True}
         value = secrets._get_field_value("test_secret", "test_field", instruction)
         self.assertIsNone(value)  # Should return None, not fail
 
         # Test optional INI key that doesn't exist in existing file
-        import tempfile
         import os
+        import tempfile
 
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.ini', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".ini", delete=False) as f:
             f.write("[section1]\nkey1=value1\n")
             ini_file_path = f.name
 
         try:
             instruction = {
                 "value": f"ini://{ini_file_path}:section1:nonexistent_key",
-                "optional": True
+                "optional": True,
             }
             value = secrets._get_field_value("test_secret", "test_field", instruction)
             self.assertIsNone(value)  # Should return None, not fail
@@ -1107,10 +1147,7 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         getpass.side_effect = KeyboardInterrupt()
 
         # Test optional prompt that gets cancelled
-        instruction = {
-            "value": "prompt:Enter optional password",
-            "optional": True
-        }
+        instruction = {"value": "prompt:Enter optional password", "optional": True}
         value = secrets._get_field_value("test_secret", "test_field", instruction)
         self.assertIsNone(value)  # Should return None, not fail
 
@@ -1126,26 +1163,17 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         secrets = load_secrets_v3.SecretsV3Base(module, syaml)
 
         # Test optional static string
-        instruction = {
-            "value": "static_string_value",
-            "optional": True
-        }
+        instruction = {"value": "static_string_value", "optional": True}
         value = secrets._get_field_value("test_secret", "test_field", instruction)
         self.assertEqual(value, "static_string_value")
 
         # Test optional static number
-        instruction = {
-            "value": 42,
-            "optional": True
-        }
+        instruction = {"value": 42, "optional": True}
         value = secrets._get_field_value("test_secret", "test_field", instruction)
         self.assertEqual(value, 42)
 
         # Test optional static boolean
-        instruction = {
-            "value": True,
-            "optional": True
-        }
+        instruction = {"value": True, "optional": True}
         value = secrets._get_field_value("test_secret", "test_field", instruction)
         self.assertTrue(value)
 
@@ -1157,19 +1185,15 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         secrets = load_secrets_v3.SecretsV3Base(module, syaml)
 
         # Test optional file that exists
-        instruction = {
-            "value": f"file://{self.test_file}",
-            "optional": True
-        }
+        instruction = {"value": f"file://{self.test_file}", "optional": True}
         value = secrets._get_field_value("test_secret", "test_field", instruction)
         self.assertIsNotNone(value)  # Should return actual file content
-        self.assertIn("This space intentionally left blank", value)  # Should contain file content
+        self.assertIn(
+            "This space intentionally left blank", value
+        )  # Should contain file content
 
         # Test optional file+base64 that exists
-        instruction = {
-            "value": f"file+base64://{self.test_file}",
-            "optional": True
-        }
+        instruction = {"value": f"file+base64://{self.test_file}", "optional": True}
         value = secrets._get_field_value("test_secret", "test_field", instruction)
         self.assertIsNotNone(value)  # Should return base64 encoded content
 

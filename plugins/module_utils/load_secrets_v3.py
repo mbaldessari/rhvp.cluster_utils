@@ -16,6 +16,7 @@
 """
 Module that implements V3 of the values-secret.yaml spec
 """
+
 from __future__ import absolute_import, division, print_function
 
 __metaclass__ = type
@@ -24,7 +25,6 @@ import base64
 import configparser
 import getpass
 import os
-import re
 import time
 
 from ansible_collections.rhvp.cluster_utils.plugins.module_utils.load_secrets_common import (
@@ -34,18 +34,9 @@ from ansible_collections.rhvp.cluster_utils.plugins.module_utils.load_secrets_co
 
 # Default password policies for V3
 DEFAULT_V3_POLICIES = {
-    "basic": {
-        "length": 16,
-        "charset": "alphanumeric"
-    },
-    "medium": {
-        "length": 20,
-        "charset": "alphanumeric_symbols"
-    },
-    "strong": {
-        "length": 32,
-        "charset": "all"
-    }
+    "basic": {"length": 16, "charset": "alphanumeric"},
+    "medium": {"length": 20, "charset": "alphanumeric_symbols"},
+    "strong": {"length": 32, "charset": "all"},
 }
 
 # Convert simplified charset names to vault policy format
@@ -53,20 +44,20 @@ CHARSET_MAPPINGS = {
     "alphanumeric": {
         "lowercase": "abcdefghijklmnopqrstuvwxyz",
         "uppercase": "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
-        "digits": "0123456789"
+        "digits": "0123456789",
     },
     "alphanumeric_symbols": {
         "lowercase": "abcdefghijklmnopqrstuvwxyz",
         "uppercase": "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
         "digits": "0123456789",
-        "symbols": "!@#%^&*"
+        "symbols": "!@#%^&*",
     },
     "all": {
         "lowercase": "abcdefghijklmnopqrstuvwxyz",
         "uppercase": "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
         "digits": "0123456789",
-        "symbols": "!@#$%^&*()_+-=[]{}|;:,.<>?"
-    }
+        "symbols": "!@#$%^&*()_+-=[]{}|;:,.<>?",
+    },
 }
 
 
@@ -91,7 +82,7 @@ class SecretsV3Base:
         settings = self.syaml.get("settings", {})
         return {
             "targets": settings.get("targets", ["hub"]),
-            "namespace": settings.get("namespace", "validated-patterns-secrets")
+            "namespace": settings.get("namespace", "validated-patterns-secrets"),
         }
 
     def _get_backing_store(self):
@@ -163,15 +154,27 @@ class SecretsV3Base:
 
         # Check for instruction patterns
         if actual_instruction.startswith("file+base64://"):
-            return "file_base64", actual_instruction[14:], is_optional  # Remove file+base64:// prefix
+            return (
+                "file_base64",
+                actual_instruction[14:],
+                is_optional,
+            )  # Remove file+base64:// prefix
         elif actual_instruction.startswith("file://"):
             return "file", actual_instruction[7:], is_optional  # Remove file:// prefix
         elif actual_instruction.startswith("ini://"):
             return "ini", actual_instruction[6:], is_optional  # Remove ini:// prefix
         elif actual_instruction.startswith("generate:"):
-            return "generate", actual_instruction[9:], is_optional  # Remove generate: prefix
+            return (
+                "generate",
+                actual_instruction[9:],
+                is_optional,
+            )  # Remove generate: prefix
         elif actual_instruction.startswith("prompt:"):
-            return "prompt", actual_instruction[7:], is_optional  # Remove prompt: prefix
+            return (
+                "prompt",
+                actual_instruction[7:],
+                is_optional,
+            )  # Remove prompt: prefix
         else:
             return "static", actual_instruction, is_optional
 
@@ -180,7 +183,10 @@ class SecretsV3Base:
         # Validate backing store
         backing_store = self._get_backing_store()
         if backing_store not in ["vault", "kubernetes", "aws-secrets-manager"]:
-            return (False, f"Unsupported backingStore: {backing_store}. Supported values: vault, kubernetes, aws-secrets-manager")
+            return (
+                False,
+                f"Unsupported backingStore: {backing_store}. Supported values: vault, kubernetes, aws-secrets-manager",
+            )
 
         secrets = self._get_secrets()
         if len(secrets) == 0:
@@ -211,13 +217,19 @@ class SecretsV3Base:
             if "targets" in secret_config:
                 targets = secret_config["targets"]
                 if not isinstance(targets, list) or len(targets) == 0:
-                    return (False, f"Secret '{secret_name}' targets must be a non-empty list")
+                    return (
+                        False,
+                        f"Secret '{secret_name}' targets must be a non-empty list",
+                    )
 
             # Check for kubernetes-specific fields in vault mode
             kubernetes_fields = ["namespaces", "type", "labels", "annotations"]
             for k_field in kubernetes_fields:
                 if k_field in secret_config:
-                    return (False, f"Secret '{secret_name}' contains kubernetes-specific field '{k_field}' but backingStore is vault")
+                    return (
+                        False,
+                        f"Secret '{secret_name}' contains kubernetes-specific field '{k_field}' but backingStore is vault",
+                    )
 
         elif backing_store == "kubernetes":
             # Validate namespaces if specified
@@ -225,60 +237,102 @@ class SecretsV3Base:
                 namespaces = secret_config["namespaces"]
                 if isinstance(namespaces, str):
                     if not namespaces.strip():
-                        return (False, f"Secret '{secret_name}' namespaces cannot be empty")
+                        return (
+                            False,
+                            f"Secret '{secret_name}' namespaces cannot be empty",
+                        )
                 elif isinstance(namespaces, list):
                     if len(namespaces) == 0:
-                        return (False, f"Secret '{secret_name}' namespaces list cannot be empty")
+                        return (
+                            False,
+                            f"Secret '{secret_name}' namespaces list cannot be empty",
+                        )
                     for ns in namespaces:
                         if not isinstance(ns, str) or not ns.strip():
-                            return (False, f"Secret '{secret_name}' namespaces must be non-empty strings")
+                            return (
+                                False,
+                                f"Secret '{secret_name}' namespaces must be non-empty strings",
+                            )
                 else:
-                    return (False, f"Secret '{secret_name}' namespaces must be a string or list of strings")
+                    return (
+                        False,
+                        f"Secret '{secret_name}' namespaces must be a string or list of strings",
+                    )
 
             # Validate kubernetes secret type if specified
             if "type" in secret_config:
                 secret_type = secret_config["type"]
                 if not isinstance(secret_type, str) or not secret_type.strip():
-                    return (False, f"Secret '{secret_name}' type must be a non-empty string")
+                    return (
+                        False,
+                        f"Secret '{secret_name}' type must be a non-empty string",
+                    )
 
             # Validate labels if specified
             if "labels" in secret_config:
                 labels = secret_config["labels"]
                 if not isinstance(labels, dict):
-                    return (False, f"Secret '{secret_name}' labels must be a dictionary")
+                    return (
+                        False,
+                        f"Secret '{secret_name}' labels must be a dictionary",
+                    )
                 for key, value in labels.items():
                     if not isinstance(key, str) or not isinstance(value, str):
-                        return (False, f"Secret '{secret_name}' labels keys and values must be strings")
+                        return (
+                            False,
+                            f"Secret '{secret_name}' labels keys and values must be strings",
+                        )
 
             # Validate annotations if specified
             if "annotations" in secret_config:
                 annotations = secret_config["annotations"]
                 if not isinstance(annotations, dict):
-                    return (False, f"Secret '{secret_name}' annotations must be a dictionary")
+                    return (
+                        False,
+                        f"Secret '{secret_name}' annotations must be a dictionary",
+                    )
                 for key, value in annotations.items():
                     if not isinstance(key, str) or not isinstance(value, str):
-                        return (False, f"Secret '{secret_name}' annotations keys and values must be strings")
+                        return (
+                            False,
+                            f"Secret '{secret_name}' annotations keys and values must be strings",
+                        )
 
             # Check for vault-specific fields in kubernetes mode
             if "targets" in secret_config:
-                return (False, f"Secret '{secret_name}' contains vault-specific field 'targets' but backingStore is kubernetes")
+                return (
+                    False,
+                    f"Secret '{secret_name}' contains vault-specific field 'targets' but backingStore is kubernetes",
+                )
 
         elif backing_store == "aws-secrets-manager":
             # Validate AWS-specific fields
             if "secretName" in secret_config:
                 secret_name_value = secret_config["secretName"]
-                if not isinstance(secret_name_value, str) or not secret_name_value.strip():
-                    return (False, f"Secret '{secret_name}' secretName must be a non-empty string")
+                if (
+                    not isinstance(secret_name_value, str)
+                    or not secret_name_value.strip()
+                ):
+                    return (
+                        False,
+                        f"Secret '{secret_name}' secretName must be a non-empty string",
+                    )
 
             if "description" in secret_config:
                 description = secret_config["description"]
                 if not isinstance(description, str):
-                    return (False, f"Secret '{secret_name}' description must be a string")
+                    return (
+                        False,
+                        f"Secret '{secret_name}' description must be a string",
+                    )
 
             if "kmsKeyId" in secret_config:
                 kms_key_id = secret_config["kmsKeyId"]
                 if not isinstance(kms_key_id, str) or not kms_key_id.strip():
-                    return (False, f"Secret '{secret_name}' kmsKeyId must be a non-empty string")
+                    return (
+                        False,
+                        f"Secret '{secret_name}' kmsKeyId must be a non-empty string",
+                    )
 
             if "tags" in secret_config:
                 tags = secret_config["tags"]
@@ -286,46 +340,80 @@ class SecretsV3Base:
                     return (False, f"Secret '{secret_name}' tags must be a dictionary")
                 for key, value in tags.items():
                     if not isinstance(key, str) or not isinstance(value, str):
-                        return (False, f"Secret '{secret_name}' tags keys and values must be strings")
+                        return (
+                            False,
+                            f"Secret '{secret_name}' tags keys and values must be strings",
+                        )
 
             if "automaticRotation" in secret_config:
                 rotation_config = secret_config["automaticRotation"]
                 if not isinstance(rotation_config, dict):
-                    return (False, f"Secret '{secret_name}' automaticRotation must be a dictionary")
+                    return (
+                        False,
+                        f"Secret '{secret_name}' automaticRotation must be a dictionary",
+                    )
 
                 if "enabled" not in rotation_config:
-                    return (False, f"Secret '{secret_name}' automaticRotation must have 'enabled' field")
+                    return (
+                        False,
+                        f"Secret '{secret_name}' automaticRotation must have 'enabled' field",
+                    )
 
                 enabled = rotation_config["enabled"]
                 if not isinstance(enabled, bool):
-                    return (False, f"Secret '{secret_name}' automaticRotation enabled must be a boolean")
+                    return (
+                        False,
+                        f"Secret '{secret_name}' automaticRotation enabled must be a boolean",
+                    )
 
                 if enabled:
                     if "rotationSchedule" not in rotation_config:
-                        return (False, f"Secret '{secret_name}' automaticRotation requires 'rotationSchedule' when enabled")
+                        return (
+                            False,
+                            f"Secret '{secret_name}' automaticRotation requires 'rotationSchedule' when enabled",
+                        )
 
             # Check for vault/kubernetes-specific fields in AWS mode
             invalid_fields = ["targets", "namespaces", "type", "labels", "annotations"]
             for field in invalid_fields:
                 if field in secret_config:
-                    return (False, f"Secret '{secret_name}' contains field '{field}' which is not supported with aws-secrets-manager backing store")
+                    return (
+                        False,
+                        f"Secret '{secret_name}' contains field '{field}' which is not supported with aws-secrets-manager backing store",
+                    )
 
         # Validate fields
         field_names = []
-        reserved_fields = ["targets", "namespaces", "type", "labels", "annotations", "secretName", "description", "kmsKeyId", "tags", "automaticRotation"]
+        reserved_fields = [
+            "targets",
+            "namespaces",
+            "type",
+            "labels",
+            "annotations",
+            "secretName",
+            "description",
+            "kmsKeyId",
+            "tags",
+            "automaticRotation",
+        ]
         for field_name, instruction in secret_config.items():
             if field_name in reserved_fields:
                 continue  # Skip reserved fields
 
             field_names.append(field_name)
-            result = self._validate_field(secret_name, field_name, instruction, backing_store)
+            result = self._validate_field(
+                secret_name, field_name, instruction, backing_store
+            )
             if not result[0]:
                 return result
 
         # Check for duplicate field names
         field_dupes = find_dupes(field_names)
         if len(field_dupes) > 0:
-            return (False, f"Secret '{secret_name}' has duplicate field names: {field_dupes}")
+            return (
+                False,
+                f"Secret '{secret_name}' has duplicate field names: {field_dupes}",
+            )
 
         return (True, "")
 
@@ -339,56 +427,94 @@ class SecretsV3Base:
                 return (True, "")
             case "file":
                 if not param:
-                    return (False, f"Secret '{secret_name}' field '{field_name}' has empty file path")
+                    return (
+                        False,
+                        f"Secret '{secret_name}' field '{field_name}' has empty file path",
+                    )
                 # Check if file exists
                 expanded_path = os.path.expanduser(param)
                 if not os.path.isfile(expanded_path):
-                    return (False, f"Secret '{secret_name}' field '{field_name}' file not found: {param}")
+                    return (
+                        False,
+                        f"Secret '{secret_name}' field '{field_name}' file not found: {param}",
+                    )
                 return (True, "")
             case "file_base64":
                 if not param:
-                    return (False, f"Secret '{secret_name}' field '{field_name}' has empty file path")
+                    return (
+                        False,
+                        f"Secret '{secret_name}' field '{field_name}' has empty file path",
+                    )
                 # Check if file exists
                 expanded_path = os.path.expanduser(param)
                 if not os.path.isfile(expanded_path):
-                    return (False, f"Secret '{secret_name}' field '{field_name}' file not found: {param}")
+                    return (
+                        False,
+                        f"Secret '{secret_name}' field '{field_name}' file not found: {param}",
+                    )
                 return (True, "")
             case "ini":
                 if not param:
-                    return (False, f"Secret '{secret_name}' field '{field_name}' has empty ini specification")
+                    return (
+                        False,
+                        f"Secret '{secret_name}' field '{field_name}' has empty ini specification",
+                    )
                 # Parse and validate ini specification
                 try:
                     file_path, section, key = self._parse_ini_spec(param)
                     expanded_path = os.path.expanduser(file_path)
                     if not os.path.isfile(expanded_path):
-                        return (False, f"Secret '{secret_name}' field '{field_name}' ini file not found: {file_path}")
+                        return (
+                            False,
+                            f"Secret '{secret_name}' field '{field_name}' ini file not found: {file_path}",
+                        )
                     return (True, "")
                 except ValueError as e:
-                    return (False, f"Secret '{secret_name}' field '{field_name}' invalid ini specification: {e}")
+                    return (
+                        False,
+                        f"Secret '{secret_name}' field '{field_name}' invalid ini specification: {e}",
+                    )
                 return (True, "")
             case "generate":
                 if backing_store in ["kubernetes", "aws-secrets-manager"]:
-                    return (False, f"Secret '{secret_name}' field '{field_name}' uses 'generate:' instruction which is not supported with {backing_store} backing store. Use 'prompt:' instead.")
+                    return (
+                        False,
+                        f"Secret '{secret_name}' field '{field_name}' uses 'generate:' instruction which is not supported with {backing_store} backing store. Use 'prompt:' instead.",
+                    )
                 if not param:
-                    return (False, f"Secret '{secret_name}' field '{field_name}' has empty policy name")
+                    return (
+                        False,
+                        f"Secret '{secret_name}' field '{field_name}' has empty policy name",
+                    )
                 # Check if policy exists
                 policies = self._get_policies()
                 if param not in policies:
-                    return (False, f"Secret '{secret_name}' field '{field_name}' uses unknown policy: {param}")
+                    return (
+                        False,
+                        f"Secret '{secret_name}' field '{field_name}' uses unknown policy: {param}",
+                    )
                 return (True, "")
             case "prompt":
                 if not param:
-                    return (False, f"Secret '{secret_name}' field '{field_name}' has empty prompt message")
+                    return (
+                        False,
+                        f"Secret '{secret_name}' field '{field_name}' has empty prompt message",
+                    )
                 return (True, "")
             case _:
-                return (False, f"Secret '{secret_name}' field '{field_name}' has unknown instruction type")
+                return (
+                    False,
+                    f"Secret '{secret_name}' field '{field_name}' has unknown instruction type",
+                )
 
     def _get_field_value(self, secret_name, field_name, instruction):
         """Get the actual value for a field based on its instruction"""
         field_type, param, is_optional = self._parse_field_instruction(instruction)
 
         try:
-            return self._get_field_value_internal(field_type, param, secret_name, field_name)
+            return self._get_field_value_internal(
+                field_type, param, secret_name, field_name
+            )
         except Exception as e:
             if is_optional:
                 # For optional fields, return None instead of failing
@@ -405,21 +531,21 @@ class SecretsV3Base:
             case "file":
                 expanded_path = os.path.expanduser(param)
                 try:
-                    with open(expanded_path, 'r') as f:
+                    with open(expanded_path, "r") as f:
                         content = f.read().strip()
                     # Auto-detect binary files and base64 encode them
                     if self._is_binary_file(expanded_path):
-                        return base64.b64encode(content.encode()).decode('utf-8')
+                        return base64.b64encode(content.encode()).decode("utf-8")
                     return content
                 except Exception as e:
                     raise Exception(f"Error reading file {param}: {str(e)}")
             case "file_base64":
                 expanded_path = os.path.expanduser(param)
                 try:
-                    with open(expanded_path, 'rb') as f:
+                    with open(expanded_path, "rb") as f:
                         content = f.read()
                     # Always base64 encode the file content
-                    return base64.b64encode(content).decode('utf-8')
+                    return base64.b64encode(content).decode("utf-8")
                 except Exception as e:
                     raise Exception(f"Error reading file {param}: {str(e)}")
             case "ini":
@@ -442,7 +568,7 @@ class SecretsV3Base:
 
     def _is_binary_file(self, filepath):
         """Check if a file is binary (should be base64 encoded)"""
-        binary_extensions = {'.crt', '.pem', '.key', '.p12', '.pfx', '.der', '.cer'}
+        binary_extensions = {".crt", ".pem", ".key", ".p12", ".pfx", ".der", ".cer"}
         _, ext = os.path.splitext(filepath.lower())
         return ext in binary_extensions
 
@@ -454,16 +580,18 @@ class SecretsV3Base:
         - file_path:section:key
         - file_path:key (defaults to 'default' section)
         """
-        parts = ini_spec.split(':')
+        parts = ini_spec.split(":")
         if len(parts) == 2:
             # file_path:key format (default section)
             file_path, key = parts
-            section = 'default'
+            section = "default"
         elif len(parts) == 3:
             # file_path:section:key format
             file_path, section, key = parts
         else:
-            raise ValueError(f"Invalid ini specification format: {ini_spec}. Expected 'file:key' or 'file:section:key'")
+            raise ValueError(
+                f"Invalid ini specification format: {ini_spec}. Expected 'file:key' or 'file:section:key'"
+            )
 
         if not file_path:
             raise ValueError("File path cannot be empty")
@@ -485,7 +613,9 @@ class SecretsV3Base:
             raise KeyError(f"Section '{section}' not found in {file_path}")
 
         if key not in config[section]:
-            raise KeyError(f"Key '{key}' not found in section '{section}' of {file_path}")
+            raise KeyError(
+                f"Key '{key}' not found in section '{section}' of {file_path}"
+            )
 
         return config[section][key]
 
@@ -556,7 +686,9 @@ class LoadSecretsV3(SecretsV3Base):
                 continue
 
             verb = "put" if field_count == 0 else "patch"
-            self._inject_field(secret_name, field_name, instruction, mount, targets, verb)
+            self._inject_field(
+                secret_name, field_name, instruction, mount, targets, verb
+            )
             field_count += 1
 
     def _inject_field(self, secret_name, field_name, instruction, mount, targets, verb):
@@ -565,25 +697,35 @@ class LoadSecretsV3(SecretsV3Base):
 
         match field_type:
             case "generate":
-                self._inject_generated_field(secret_name, field_name, param, mount, targets, verb)
+                self._inject_generated_field(
+                    secret_name, field_name, param, mount, targets, verb
+                )
             case _:
                 value = self._get_field_value(secret_name, field_name, instruction)
                 if value is not None:  # Only inject if value was successfully retrieved
-                    self._inject_static_field(secret_name, field_name, value, mount, targets, verb)
+                    self._inject_static_field(
+                        secret_name, field_name, value, mount, targets, verb
+                    )
                 # If value is None (optional field failed), skip this field
 
-    def _inject_generated_field(self, secret_name, field_name, policy_name, mount, targets, verb):
+    def _inject_generated_field(
+        self, secret_name, field_name, policy_name, mount, targets, verb
+    ):
         """Inject a generated field using vault policy"""
-        gen_cmd = f"vault read -field=password sys/policies/password/{policy_name}/generate"
+        gen_cmd = (
+            f"vault read -field=password sys/policies/password/{policy_name}/generate"
+        )
 
         for target in targets:
             cmd = (
                 f"oc exec -n {self.namespace} {self.pod} -i -- sh -c "
-                f"\"{gen_cmd} | vault kv {verb} -mount={mount} {target}/{secret_name} {field_name}=-\""
+                f'"{gen_cmd} | vault kv {verb} -mount={mount} {target}/{secret_name} {field_name}=-"'
             )
             self._run_command(cmd, attempts=3)
 
-    def _inject_static_field(self, secret_name, field_name, value, mount, targets, verb):
+    def _inject_static_field(
+        self, secret_name, field_name, value, mount, targets, verb
+    ):
         """Inject a static field value"""
         for target in targets:
             cmd = (
@@ -660,7 +802,9 @@ class LoadSecretsV3Kubernetes(SecretsV3Base):
 
             # Get the field value
             value = self._get_field_value(secret_name, field_name, instruction)
-            if value is not None:  # Only include fields that were successfully processed
+            if (
+                value is not None
+            ):  # Only include fields that were successfully processed
                 secret_data[field_name] = value
             # If value is None (optional field failed), skip this field
 
@@ -675,7 +819,9 @@ class LoadSecretsV3Kubernetes(SecretsV3Base):
 
         return total_created
 
-    def _create_secret_in_namespace(self, secret_name, namespace, secret_type, labels, annotations, secret_data):
+    def _create_secret_in_namespace(
+        self, secret_name, namespace, secret_type, labels, annotations, secret_data
+    ):
         """Create a single Kubernetes secret in a specific namespace"""
         try:
             # Prepare secret manifest
@@ -686,28 +832,35 @@ class LoadSecretsV3Kubernetes(SecretsV3Base):
                     "name": secret_name,
                     "namespace": namespace,
                     "labels": labels,
-                    "annotations": annotations
+                    "annotations": annotations,
                 },
                 "type": secret_type,
-                "data": {}
+                "data": {},
             }
 
             # Encode secret data
             import base64
+
             for key, value in secret_data.items():
                 if isinstance(value, str):
-                    secret_manifest["data"][key] = base64.b64encode(value.encode('utf-8')).decode('utf-8')
+                    secret_manifest["data"][key] = base64.b64encode(
+                        value.encode("utf-8")
+                    ).decode("utf-8")
                 else:
                     # Convert non-string values to string first
-                    secret_manifest["data"][key] = base64.b64encode(str(value).encode('utf-8')).decode('utf-8')
+                    secret_manifest["data"][key] = base64.b64encode(
+                        str(value).encode("utf-8")
+                    ).decode("utf-8")
 
             # Use kubectl to create the secret
-            import json
             import tempfile
 
             # Write manifest to temporary file
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+            with tempfile.NamedTemporaryFile(
+                mode="w", suffix=".yaml", delete=False
+            ) as f:
                 import yaml
+
                 yaml.dump(secret_manifest, f)
                 manifest_file = f.name
 
@@ -719,15 +872,20 @@ class LoadSecretsV3Kubernetes(SecretsV3Base):
                 if result[0] == 0:
                     return True
                 else:
-                    self.module.fail_json(f"Failed to create secret {secret_name} in namespace {namespace}: {result[2]}")
+                    self.module.fail_json(
+                        f"Failed to create secret {secret_name} in namespace {namespace}: {result[2]}"
+                    )
                     return False
             finally:
                 # Clean up temporary file
                 import os
+
                 os.unlink(manifest_file)
 
         except Exception as e:
-            self.module.fail_json(f"Failed to create secret {secret_name} in namespace {namespace}: {str(e)}")
+            self.module.fail_json(
+                f"Failed to create secret {secret_name} in namespace {namespace}: {str(e)}"
+            )
             return False
 
     def inject_secrets(self):
@@ -801,7 +959,13 @@ class LoadSecretsV3AWS(SecretsV3Base):
 
         # Collect secret data
         secret_data = {}
-        reserved_fields = ["secretName", "description", "kmsKeyId", "tags", "automaticRotation"]
+        reserved_fields = [
+            "secretName",
+            "description",
+            "kmsKeyId",
+            "tags",
+            "automaticRotation",
+        ]
 
         for field_name, instruction in secret_config.items():
             if field_name in reserved_fields:
@@ -809,7 +973,9 @@ class LoadSecretsV3AWS(SecretsV3Base):
 
             # Get the field value
             value = self._get_field_value(secret_key, field_name, instruction)
-            if value is not None:  # Only include fields that were successfully processed
+            if (
+                value is not None
+            ):  # Only include fields that were successfully processed
                 secret_data[field_name] = value
             # If value is None (optional field failed), skip this field
 
@@ -820,13 +986,16 @@ class LoadSecretsV3AWS(SecretsV3Base):
             )
             return 1 if result else 0
         except Exception as e:
-            self.module.fail_json(f"Failed to create AWS secret {secret_name}: {str(e)}")
+            self.module.fail_json(
+                f"Failed to create AWS secret {secret_name}: {str(e)}"
+            )
             return 0
 
-    def _create_secret_with_aws_cli(self, secret_name, secret_data, description, kms_key_id, tags, rotation_config):
+    def _create_secret_with_aws_cli(
+        self, secret_name, secret_data, description, kms_key_id, tags, rotation_config
+    ):
         """Create secret using AWS CLI"""
         import json
-        import tempfile
 
         # Prepare secret value as JSON
         secret_value = json.dumps(secret_data)
@@ -878,18 +1047,26 @@ class LoadSecretsV3AWS(SecretsV3Base):
             # Check if secret already exists
             if "ResourceExistsException" in result[2]:
                 # Secret exists, update it instead
-                return self._update_existing_secret(secret_name, secret_data, description, region, profile)
+                return self._update_existing_secret(
+                    secret_name, secret_data, description, region, profile
+                )
             else:
-                self.module.fail_json(f"Failed to create secret {secret_name}: {result[2]}")
+                self.module.fail_json(
+                    f"Failed to create secret {secret_name}: {result[2]}"
+                )
                 return False
 
         # Configure automatic rotation if specified
         if rotation_config and rotation_config.get("enabled"):
-            self._configure_automatic_rotation(secret_name, rotation_config, region, profile)
+            self._configure_automatic_rotation(
+                secret_name, rotation_config, region, profile
+            )
 
         return True
 
-    def _update_existing_secret(self, secret_name, secret_data, description, region, profile):
+    def _update_existing_secret(
+        self, secret_name, secret_data, description, region, profile
+    ):
         """Update an existing secret"""
         import json
 
@@ -912,16 +1089,25 @@ class LoadSecretsV3AWS(SecretsV3Base):
 
         return result[0] == 0
 
-    def _configure_automatic_rotation(self, secret_name, rotation_config, region, profile):
+    def _configure_automatic_rotation(
+        self, secret_name, rotation_config, region, profile
+    ):
         """Configure automatic rotation for a secret"""
         cmd_parts = ["aws", "secretsmanager", "rotate-secret"]
         cmd_parts.extend(["--secret-id", secret_name])
 
         if "rotationLambdaArn" in rotation_config:
-            cmd_parts.extend(["--rotation-lambda-arn", rotation_config["rotationLambdaArn"]])
+            cmd_parts.extend(
+                ["--rotation-lambda-arn", rotation_config["rotationLambdaArn"]]
+            )
 
         if "rotationSchedule" in rotation_config:
-            cmd_parts.extend(["--rotation-rules", f"AutomaticallyAfterDays={rotation_config['rotationSchedule']}"])
+            cmd_parts.extend(
+                [
+                    "--rotation-rules",
+                    f"AutomaticallyAfterDays={rotation_config['rotationSchedule']}",
+                ]
+            )
 
         if region:
             cmd_parts.extend(["--region", region])
@@ -933,7 +1119,9 @@ class LoadSecretsV3AWS(SecretsV3Base):
         result = self.module.run_command(cmd, check_rc=False)
 
         if result[0] != 0:
-            self.module.fail_json(f"Failed to configure rotation for secret {secret_name}: {result[2]}")
+            self.module.fail_json(
+                f"Failed to configure rotation for secret {secret_name}: {result[2]}"
+            )
 
     def inject_secrets(self):
         """Inject all secrets into AWS Secrets Manager"""

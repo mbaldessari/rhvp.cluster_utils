@@ -143,8 +143,8 @@ from ansible_collections.rhvp.cluster_utils.plugins.module_utils.load_secrets_v2
 )
 from ansible_collections.rhvp.cluster_utils.plugins.module_utils.load_secrets_v3 import (
     LoadSecretsV3,
-    LoadSecretsV3Kubernetes,
     LoadSecretsV3AWS,
+    LoadSecretsV3Kubernetes,
 )
 
 try:
@@ -208,7 +208,9 @@ def run(module):
         elif backing_store == "aws-secrets-manager":
             secret_obj = LoadSecretsV3AWS(module, syaml)
         else:
-            module.fail_json(f"Unsupported backingStore '{backing_store}' for version {version}")
+            module.fail_json(
+                f"Unsupported backingStore '{backing_store}' for version {version}"
+            )
     elif version == "2.0":
         secret_obj = LoadSecretsV2(module, syaml, namespace, pod)
     elif version == "1.0":
