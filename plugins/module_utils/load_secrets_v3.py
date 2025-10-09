@@ -98,6 +98,10 @@ class SecretsV3Base:
         """Get backing store with default"""
         return self.syaml.get("backingStore", "vault")
 
+    def _get_aws_config(self):
+        """Get AWS configuration"""
+        return self.syaml.get("awsConfig", {})
+
     def _get_secrets(self):
         """Get secrets dictionary"""
         return self.syaml.get("secrets", {})
@@ -163,8 +167,8 @@ class SecretsV3Base:
         """Validate the V3 secrets structure"""
         # Validate backing store
         backing_store = self._get_backing_store()
-        if backing_store not in ["vault", "kubernetes"]:
-            return (False, f"Unsupported backingStore: {backing_store}. Supported values: vault, kubernetes")
+        if backing_store not in ["vault", "kubernetes", "aws-secrets-manager"]:
+            return (False, f"Unsupported backingStore: {backing_store}. Supported values: vault, kubernetes, aws-secrets-manager")
 
         secrets = self._get_secrets()
         if len(secrets) == 0:
@@ -247,9 +251,56 @@ class SecretsV3Base:
             if "targets" in secret_config:
                 return (False, f"Secret '{secret_name}' contains vault-specific field 'targets' but backingStore is kubernetes")
 
+        elif backing_store == "aws-secrets-manager":
+            # Validate AWS-specific fields
+            if "secretName" in secret_config:
+                secret_name_value = secret_config["secretName"]
+                if not isinstance(secret_name_value, str) or not secret_name_value.strip():
+                    return (False, f"Secret '{secret_name}' secretName must be a non-empty string")
+
+            if "description" in secret_config:
+                description = secret_config["description"]
+                if not isinstance(description, str):
+                    return (False, f"Secret '{secret_name}' description must be a string")
+
+            if "kmsKeyId" in secret_config:
+                kms_key_id = secret_config["kmsKeyId"]
+                if not isinstance(kms_key_id, str) or not kms_key_id.strip():
+                    return (False, f"Secret '{secret_name}' kmsKeyId must be a non-empty string")
+
+            if "tags" in secret_config:
+                tags = secret_config["tags"]
+                if not isinstance(tags, dict):
+                    return (False, f"Secret '{secret_name}' tags must be a dictionary")
+                for key, value in tags.items():
+                    if not isinstance(key, str) or not isinstance(value, str):
+                        return (False, f"Secret '{secret_name}' tags keys and values must be strings")
+
+            if "automaticRotation" in secret_config:
+                rotation_config = secret_config["automaticRotation"]
+                if not isinstance(rotation_config, dict):
+                    return (False, f"Secret '{secret_name}' automaticRotation must be a dictionary")
+
+                if "enabled" not in rotation_config:
+                    return (False, f"Secret '{secret_name}' automaticRotation must have 'enabled' field")
+
+                enabled = rotation_config["enabled"]
+                if not isinstance(enabled, bool):
+                    return (False, f"Secret '{secret_name}' automaticRotation enabled must be a boolean")
+
+                if enabled:
+                    if "rotationSchedule" not in rotation_config:
+                        return (False, f"Secret '{secret_name}' automaticRotation requires 'rotationSchedule' when enabled")
+
+            # Check for vault/kubernetes-specific fields in AWS mode
+            invalid_fields = ["targets", "namespaces", "type", "labels", "annotations"]
+            for field in invalid_fields:
+                if field in secret_config:
+                    return (False, f"Secret '{secret_name}' contains field '{field}' which is not supported with aws-secrets-manager backing store")
+
         # Validate fields
         field_names = []
-        reserved_fields = ["targets", "namespaces", "type", "labels", "annotations"]
+        reserved_fields = ["targets", "namespaces", "type", "labels", "annotations", "secretName", "description", "kmsKeyId", "tags", "automaticRotation"]
         for field_name, instruction in secret_config.items():
             if field_name in reserved_fields:
                 continue  # Skip reserved fields
@@ -304,8 +355,8 @@ class SecretsV3Base:
                     return (False, f"Secret '{secret_name}' field '{field_name}' invalid ini specification: {e}")
                 return (True, "")
             case "generate":
-                if backing_store == "kubernetes":
-                    return (False, f"Secret '{secret_name}' field '{field_name}' uses 'generate:' instruction which is not supported with kubernetes backing store. Use 'prompt:' instead.")
+                if backing_store in ["kubernetes", "aws-secrets-manager"]:
+                    return (False, f"Secret '{secret_name}' field '{field_name}' uses 'generate:' instruction which is not supported with {backing_store} backing store. Use 'prompt:' instead.")
                 if not param:
                     return (False, f"Secret '{secret_name}' field '{field_name}' has empty policy name")
                 # Check if policy exists
@@ -656,6 +707,210 @@ class LoadSecretsV3Kubernetes(SecretsV3Base):
 
         for secret_name, secret_config in secrets.items():
             created_count = self._create_kubernetes_secret(secret_name, secret_config)
+            total_secrets += created_count
+
+        return total_secrets
+
+
+class LoadSecretsV3AWS(SecretsV3Base):
+    """
+    V3 implementation for loading secrets into AWS Secrets Manager
+    """
+
+    def __init__(self, module, syaml):
+        super().__init__(module, syaml)
+
+    def _get_secret_name_for_aws(self, secret_key, secret_config):
+        """Get the full secret name for AWS Secrets Manager"""
+        aws_config = self._get_aws_config()
+        prefix = aws_config.get("prefix", "")
+
+        # Use custom secretName if provided, otherwise use the key
+        if "secretName" in secret_config:
+            secret_name = secret_config["secretName"]
+        else:
+            secret_name = secret_key
+
+        # Apply prefix if configured
+        if prefix:
+            return f"{prefix}{secret_name}"
+        else:
+            return secret_name
+
+    def _get_secret_description(self, secret_config):
+        """Get description for the secret"""
+        return secret_config.get("description", "")
+
+    def _get_secret_kms_key_id(self, secret_config):
+        """Get KMS key ID for the secret"""
+        aws_config = self._get_aws_config()
+        return secret_config.get("kmsKeyId", aws_config.get("defaultKmsKeyId"))
+
+    def _get_secret_tags(self, secret_config):
+        """Get tags for the secret, merging defaults with secret-specific tags"""
+        aws_config = self._get_aws_config()
+        default_tags = aws_config.get("defaultTags", {})
+        secret_tags = secret_config.get("tags", {})
+
+        # Merge default tags with secret-specific tags (secret-specific takes precedence)
+        merged_tags = default_tags.copy()
+        merged_tags.update(secret_tags)
+        return merged_tags
+
+    def _get_secret_automatic_rotation(self, secret_config):
+        """Get automatic rotation configuration"""
+        return secret_config.get("automaticRotation")
+
+    def _create_aws_secret(self, secret_key, secret_config):
+        """Create an AWS Secrets Manager secret"""
+        secret_name = self._get_secret_name_for_aws(secret_key, secret_config)
+        description = self._get_secret_description(secret_config)
+        kms_key_id = self._get_secret_kms_key_id(secret_config)
+        tags = self._get_secret_tags(secret_config)
+        rotation_config = self._get_secret_automatic_rotation(secret_config)
+
+        # Collect secret data
+        secret_data = {}
+        reserved_fields = ["secretName", "description", "kmsKeyId", "tags", "automaticRotation"]
+
+        for field_name, instruction in secret_config.items():
+            if field_name in reserved_fields:
+                continue
+
+            # Get the field value
+            value = self._get_field_value(secret_key, field_name, instruction)
+            if value is not None:
+                secret_data[field_name] = value
+
+        # Create the secret using AWS CLI
+        try:
+            result = self._create_secret_with_aws_cli(
+                secret_name, secret_data, description, kms_key_id, tags, rotation_config
+            )
+            return 1 if result else 0
+        except Exception as e:
+            self.module.fail_json(f"Failed to create AWS secret {secret_name}: {str(e)}")
+            return 0
+
+    def _create_secret_with_aws_cli(self, secret_name, secret_data, description, kms_key_id, tags, rotation_config):
+        """Create secret using AWS CLI"""
+        import json
+        import tempfile
+
+        # Prepare secret value as JSON
+        secret_value = json.dumps(secret_data)
+
+        # Build AWS CLI command
+        aws_config = self._get_aws_config()
+        region = aws_config.get("region")
+        profile = aws_config.get("profile")
+
+        cmd_parts = ["aws", "secretsmanager", "create-secret"]
+        cmd_parts.extend(["--name", secret_name])
+        cmd_parts.extend(["--secret-string", secret_value])
+
+        if description:
+            cmd_parts.extend(["--description", description])
+
+        if kms_key_id:
+            cmd_parts.extend(["--kms-key-id", kms_key_id])
+
+        if region:
+            cmd_parts.extend(["--region", region])
+
+        if profile:
+            cmd_parts.extend(["--profile", profile])
+
+        # Add tags if provided
+        if tags:
+            tags_list = []
+            for key, value in tags.items():
+                tags_list.append(f"Key={key},Value={value}")
+            cmd_parts.extend(["--tags", ",".join(tags_list)])
+
+        # Add replication regions if configured
+        replication_regions = aws_config.get("replicationRegions", [])
+        if replication_regions:
+            replica_regions = []
+            for replica in replication_regions:
+                replica_spec = f"Region={replica['region']}"
+                if "kmsKeyId" in replica:
+                    replica_spec += f",KmsKeyId={replica['kmsKeyId']}"
+                replica_regions.append(replica_spec)
+            cmd_parts.extend(["--replica-regions", ",".join(replica_regions)])
+
+        # Execute command
+        cmd = " ".join([f'"{part}"' if " " in part else part for part in cmd_parts])
+        result = self.module.run_command(cmd, check_rc=False)
+
+        if result[0] != 0:
+            # Check if secret already exists
+            if "ResourceExistsException" in result[2]:
+                # Secret exists, update it instead
+                return self._update_existing_secret(secret_name, secret_data, description, region, profile)
+            else:
+                self.module.fail_json(f"Failed to create secret {secret_name}: {result[2]}")
+                return False
+
+        # Configure automatic rotation if specified
+        if rotation_config and rotation_config.get("enabled"):
+            self._configure_automatic_rotation(secret_name, rotation_config, region, profile)
+
+        return True
+
+    def _update_existing_secret(self, secret_name, secret_data, description, region, profile):
+        """Update an existing secret"""
+        import json
+
+        secret_value = json.dumps(secret_data)
+        cmd_parts = ["aws", "secretsmanager", "update-secret"]
+        cmd_parts.extend(["--secret-id", secret_name])
+        cmd_parts.extend(["--secret-string", secret_value])
+
+        if description:
+            cmd_parts.extend(["--description", description])
+
+        if region:
+            cmd_parts.extend(["--region", region])
+
+        if profile:
+            cmd_parts.extend(["--profile", profile])
+
+        cmd = " ".join([f'"{part}"' if " " in part else part for part in cmd_parts])
+        result = self.module.run_command(cmd, check_rc=False)
+
+        return result[0] == 0
+
+    def _configure_automatic_rotation(self, secret_name, rotation_config, region, profile):
+        """Configure automatic rotation for a secret"""
+        cmd_parts = ["aws", "secretsmanager", "rotate-secret"]
+        cmd_parts.extend(["--secret-id", secret_name])
+
+        if "rotationLambdaArn" in rotation_config:
+            cmd_parts.extend(["--rotation-lambda-arn", rotation_config["rotationLambdaArn"]])
+
+        if "rotationSchedule" in rotation_config:
+            cmd_parts.extend(["--rotation-rules", f"AutomaticallyAfterDays={rotation_config['rotationSchedule']}"])
+
+        if region:
+            cmd_parts.extend(["--region", region])
+
+        if profile:
+            cmd_parts.extend(["--profile", profile])
+
+        cmd = " ".join([f'"{part}"' if " " in part else part for part in cmd_parts])
+        result = self.module.run_command(cmd, check_rc=False)
+
+        if result[0] != 0:
+            self.module.fail_json(f"Failed to configure rotation for secret {secret_name}: {result[2]}")
+
+    def inject_secrets(self):
+        """Inject all secrets into AWS Secrets Manager"""
+        secrets = self._get_secrets()
+        total_secrets = 0
+
+        for secret_key, secret_config in secrets.items():
+            created_count = self._create_aws_secret(secret_key, secret_config)
             total_secrets += created_count
 
         return total_secrets

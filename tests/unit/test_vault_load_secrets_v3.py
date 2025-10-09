@@ -413,7 +413,7 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         result = secrets._validate_secrets()
         self.assertFalse(result[0])
         self.assertIn("Unsupported backingStore: consul", result[1])
-        self.assertIn("Supported values: vault, kubernetes", result[1])
+        self.assertIn("Supported values: vault, kubernetes, aws-secrets-manager", result[1])
 
     def test_validate_backing_store_default_works(self, getpass):
         """Test that validation works when backingStore is not specified (uses default)"""
@@ -683,6 +683,289 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         secret_config = {}
         annotations = k8s_secrets._get_secret_annotations(secret_config)
         self.assertEqual(annotations, {})
+
+    # AWS Secrets Manager backing store tests
+    def test_aws_backing_store_validation(self, getpass):
+        """Test that AWS Secrets Manager backing store validates correctly"""
+        # Create a mock module and secrets instance
+        module = mock.MagicMock()
+        syaml = {
+            "version": "3.0",
+            "backingStore": "aws-secrets-manager",
+            "secrets": {"test_secret": {"field1": "value1"}}
+        }
+        secrets = load_secrets_v3.SecretsV3Base(module, syaml)
+
+        # Test validation passes for aws-secrets-manager
+        result = secrets._validate_secrets()
+        self.assertTrue(result[0])
+        self.assertEqual(result[1], "")
+
+    def test_aws_backing_store_rejects_generate(self, getpass):
+        """Test that AWS backing store rejects generate: instructions"""
+        # Create a mock module and secrets instance
+        module = mock.MagicMock()
+        syaml = {
+            "version": "3.0",
+            "backingStore": "aws-secrets-manager",
+            "secrets": {"test_secret": {"password": "generate:strong"}}
+        }
+        secrets = load_secrets_v3.SecretsV3Base(module, syaml)
+
+        # Test validation fails for generate instruction
+        result = secrets._validate_secrets()
+        self.assertFalse(result[0])
+        self.assertIn("generate:", result[1])
+        self.assertIn("not supported with aws-secrets-manager backing store", result[1])
+
+    def test_aws_backing_store_rejects_other_fields(self, getpass):
+        """Test that AWS backing store rejects vault/kubernetes-specific fields"""
+        # Create a mock module and secrets instance
+        module = mock.MagicMock()
+
+        # Test rejects vault targets
+        syaml = {
+            "version": "3.0",
+            "backingStore": "aws-secrets-manager",
+            "secrets": {"test_secret": {"targets": ["hub"], "field1": "value1"}}
+        }
+        secrets = load_secrets_v3.SecretsV3Base(module, syaml)
+        result = secrets._validate_secrets()
+        self.assertFalse(result[0])
+        self.assertIn("not supported with aws-secrets-manager backing store", result[1])
+
+        # Test rejects kubernetes namespaces
+        syaml = {
+            "version": "3.0",
+            "backingStore": "aws-secrets-manager",
+            "secrets": {"test_secret": {"namespaces": ["default"], "field1": "value1"}}
+        }
+        secrets = load_secrets_v3.SecretsV3Base(module, syaml)
+        result = secrets._validate_secrets()
+        self.assertFalse(result[0])
+        self.assertIn("not supported with aws-secrets-manager backing store", result[1])
+
+    def test_aws_secret_name_validation(self, getpass):
+        """Test AWS secret name validation"""
+        # Create a mock module and secrets instance
+        module = mock.MagicMock()
+
+        # Test valid secretName
+        syaml = {
+            "version": "3.0",
+            "backingStore": "aws-secrets-manager",
+            "secrets": {"test_secret": {"secretName": "custom/secret", "field1": "value1"}}
+        }
+        secrets = load_secrets_v3.SecretsV3Base(module, syaml)
+        result = secrets._validate_secrets()
+        self.assertTrue(result[0])
+
+        # Test empty secretName
+        syaml = {
+            "version": "3.0",
+            "backingStore": "aws-secrets-manager",
+            "secrets": {"test_secret": {"secretName": "", "field1": "value1"}}
+        }
+        secrets = load_secrets_v3.SecretsV3Base(module, syaml)
+        result = secrets._validate_secrets()
+        self.assertFalse(result[0])
+        self.assertIn("secretName must be a non-empty string", result[1])
+
+    def test_aws_tags_validation(self, getpass):
+        """Test AWS tags validation"""
+        # Create a mock module and secrets instance
+        module = mock.MagicMock()
+
+        # Test valid tags
+        syaml = {
+            "version": "3.0",
+            "backingStore": "aws-secrets-manager",
+            "secrets": {
+                "test_secret": {
+                    "tags": {"Environment": "production", "Team": "platform"},
+                    "field1": "value1"
+                }
+            }
+        }
+        secrets = load_secrets_v3.SecretsV3Base(module, syaml)
+        result = secrets._validate_secrets()
+        self.assertTrue(result[0])
+
+        # Test invalid tags (non-dict)
+        syaml = {
+            "version": "3.0",
+            "backingStore": "aws-secrets-manager",
+            "secrets": {"test_secret": {"tags": "invalid", "field1": "value1"}}
+        }
+        secrets = load_secrets_v3.SecretsV3Base(module, syaml)
+        result = secrets._validate_secrets()
+        self.assertFalse(result[0])
+        self.assertIn("tags must be a dictionary", result[1])
+
+    def test_aws_automatic_rotation_validation(self, getpass):
+        """Test AWS automatic rotation validation"""
+        # Create a mock module and secrets instance
+        module = mock.MagicMock()
+
+        # Test valid rotation config
+        syaml = {
+            "version": "3.0",
+            "backingStore": "aws-secrets-manager",
+            "secrets": {
+                "test_secret": {
+                    "automaticRotation": {
+                        "enabled": True,
+                        "rotationSchedule": "rate(30 days)"
+                    },
+                    "field1": "value1"
+                }
+            }
+        }
+        secrets = load_secrets_v3.SecretsV3Base(module, syaml)
+        result = secrets._validate_secrets()
+        self.assertTrue(result[0])
+
+        # Test missing enabled field
+        syaml = {
+            "version": "3.0",
+            "backingStore": "aws-secrets-manager",
+            "secrets": {
+                "test_secret": {
+                    "automaticRotation": {"rotationSchedule": "rate(30 days)"},
+                    "field1": "value1"
+                }
+            }
+        }
+        secrets = load_secrets_v3.SecretsV3Base(module, syaml)
+        result = secrets._validate_secrets()
+        self.assertFalse(result[0])
+        self.assertIn("must have 'enabled' field", result[1])
+
+        # Test enabled but missing rotationSchedule
+        syaml = {
+            "version": "3.0",
+            "backingStore": "aws-secrets-manager",
+            "secrets": {
+                "test_secret": {
+                    "automaticRotation": {"enabled": True},
+                    "field1": "value1"
+                }
+            }
+        }
+        secrets = load_secrets_v3.SecretsV3Base(module, syaml)
+        result = secrets._validate_secrets()
+        self.assertFalse(result[0])
+        self.assertIn("requires 'rotationSchedule' when enabled", result[1])
+
+    def test_get_secret_name_for_aws(self, getpass):
+        """Test AWS secret name generation"""
+        # Create a mock module and AWS secrets instance
+        module = mock.MagicMock()
+
+        # Test with prefix
+        syaml = {
+            "version": "3.0",
+            "backingStore": "aws-secrets-manager",
+            "awsConfig": {"prefix": "myapp/prod/"},
+            "secrets": {}
+        }
+        aws_secrets = load_secrets_v3.LoadSecretsV3AWS(module, syaml)
+
+        # Test custom secretName with prefix
+        secret_config = {"secretName": "rds/credentials"}
+        secret_name = aws_secrets._get_secret_name_for_aws("database", secret_config)
+        self.assertEqual(secret_name, "myapp/prod/rds/credentials")
+
+        # Test default name with prefix
+        secret_config = {}
+        secret_name = aws_secrets._get_secret_name_for_aws("api-config", secret_config)
+        self.assertEqual(secret_name, "myapp/prod/api-config")
+
+        # Test without prefix
+        syaml_no_prefix = {
+            "version": "3.0",
+            "backingStore": "aws-secrets-manager",
+            "secrets": {}
+        }
+        aws_secrets_no_prefix = load_secrets_v3.LoadSecretsV3AWS(module, syaml_no_prefix)
+
+        secret_config = {"secretName": "custom-name"}
+        secret_name = aws_secrets_no_prefix._get_secret_name_for_aws("database", secret_config)
+        self.assertEqual(secret_name, "custom-name")
+
+    def test_get_secret_tags_merging(self, getpass):
+        """Test AWS secret tags merging"""
+        # Create a mock module and AWS secrets instance
+        module = mock.MagicMock()
+        syaml = {
+            "version": "3.0",
+            "backingStore": "aws-secrets-manager",
+            "awsConfig": {
+                "defaultTags": {
+                    "Environment": "production",
+                    "ManagedBy": "validated-patterns"
+                }
+            },
+            "secrets": {}
+        }
+        aws_secrets = load_secrets_v3.LoadSecretsV3AWS(module, syaml)
+
+        # Test merging default and secret-specific tags
+        secret_config = {
+            "tags": {
+                "Application": "myapp",
+                "Environment": "staging"  # Override default
+            }
+        }
+        merged_tags = aws_secrets._get_secret_tags(secret_config)
+        expected_tags = {
+            "Environment": "staging",  # Secret-specific takes precedence
+            "ManagedBy": "validated-patterns",  # From defaults
+            "Application": "myapp"  # Secret-specific
+        }
+        self.assertEqual(merged_tags, expected_tags)
+
+        # Test with no secret-specific tags
+        secret_config = {}
+        merged_tags = aws_secrets._get_secret_tags(secret_config)
+        expected_tags = {
+            "Environment": "production",
+            "ManagedBy": "validated-patterns"
+        }
+        self.assertEqual(merged_tags, expected_tags)
+
+    def test_get_secret_kms_key_id(self, getpass):
+        """Test AWS KMS key ID resolution"""
+        # Create a mock module and AWS secrets instance
+        module = mock.MagicMock()
+        syaml = {
+            "version": "3.0",
+            "backingStore": "aws-secrets-manager",
+            "awsConfig": {"defaultKmsKeyId": "alias/default-key"},
+            "secrets": {}
+        }
+        aws_secrets = load_secrets_v3.LoadSecretsV3AWS(module, syaml)
+
+        # Test secret-specific KMS key
+        secret_config = {"kmsKeyId": "alias/custom-key"}
+        kms_key_id = aws_secrets._get_secret_kms_key_id(secret_config)
+        self.assertEqual(kms_key_id, "alias/custom-key")
+
+        # Test default KMS key
+        secret_config = {}
+        kms_key_id = aws_secrets._get_secret_kms_key_id(secret_config)
+        self.assertEqual(kms_key_id, "alias/default-key")
+
+        # Test no default KMS key
+        syaml_no_default = {
+            "version": "3.0",
+            "backingStore": "aws-secrets-manager",
+            "secrets": {}
+        }
+        aws_secrets_no_default = load_secrets_v3.LoadSecretsV3AWS(module, syaml_no_default)
+        secret_config = {}
+        kms_key_id = aws_secrets_no_default._get_secret_kms_key_id(secret_config)
+        self.assertIsNone(kms_key_id)
 
 
 if __name__ == "__main__":

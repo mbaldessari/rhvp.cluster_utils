@@ -206,6 +206,79 @@ secrets:
 - **No `targets`**: Use `namespaces` to specify where secrets are created
 - **No `policies`**: Password generation not supported
 
+#### AWS Secrets Manager Backing Store
+
+Version 3.0 also supports an `aws-secrets-manager` backing store that creates secrets in AWS Secrets Manager:
+
+```yaml
+version: "3.0"
+backingStore: "aws-secrets-manager"
+
+# AWS-specific configuration
+awsConfig:
+  region: "us-east-1"
+  profile: "default"
+  prefix: "myapp/prod/"
+
+  defaultKmsKeyId: "alias/aws/secretsmanager"
+  defaultTags:
+    Environment: "production"
+    ManagedBy: "validated-patterns"
+
+  # Cross-region replication (optional)
+  replicationRegions:
+    - region: "us-west-2"
+      kmsKeyId: "alias/aws/secretsmanager"
+
+secrets:
+  database:
+    secretName: "rds/credentials"          # Custom secret name
+    description: "Database credentials"
+    tags:
+      Application: "myapp"
+      Component: "database"
+    username: "dbuser"
+    password: "prompt:Enter database password"
+    host: "ini://~/.config/db.ini:default:host"
+
+  api-config:
+    # Uses prefix: myapp/prod/api-config
+    description: "API configuration"
+    kmsKeyId: "alias/custom-encryption-key"  # Override default KMS key
+    endpoint: "https://api.example.com"
+    token: "prompt:Enter API token"
+    config: "file+base64://path/to/config.json"
+
+  auto-rotate-secret:
+    secretName: "rds/auto-rotate"
+    description: "Auto-rotating database secret"
+    automaticRotation:
+      enabled: true
+      rotationSchedule: "rate(30 days)"
+      rotationLambdaArn: "arn:aws:lambda:us-east-1:123456789012:function:SecretsManagerRotation"
+    username: "autouser"
+    password: "prompt:Enter initial password"
+```
+
+**Key features for AWS Secrets Manager backing store:**
+
+- **`secretName`**: Custom secret name (defaults to YAML key)
+- **`description`**: Human-readable description for the secret
+- **`kmsKeyId`**: Custom KMS key for encryption (overrides default)
+- **`tags`**: AWS tags merged with default tags from `awsConfig`
+- **`automaticRotation`**: AWS automatic rotation configuration
+- **Cross-region replication**: Configured in `awsConfig.replicationRegions`
+- **No `generate:` instructions**: Use `prompt:` instead for sensitive values
+
+**AWS Configuration Options:**
+
+- **`region`**: AWS region for secrets
+- **`profile`**: AWS CLI profile to use
+- **`prefix`**: Prefix for all secret names
+- **`defaultKmsKeyId`**: Default KMS key for encryption
+- **`defaultTags`**: Tags applied to all secrets
+- **`replicationRegions`**: Cross-region replication setup
+
 ### Version 2.0
 
 Here is a version 2.0 example file (specifying `version: 2.0` is mandatory in this case):
