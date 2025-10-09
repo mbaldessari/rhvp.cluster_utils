@@ -112,17 +112,26 @@ secrets:
     ca_cert: "file://path/to/ca.crt"  # Load file content as-is
     binary_cert: "file+base64://path/to/cert.p12"  # Load file and base64 encode
     admin_password: "prompt:Enter admin password"  # Prompt user for input
+    debug_config:  # Optional field using object syntax
+      value: "file://path/to/debug-config.json"
+      optional: true
 
   api-config:
     targets: ["spoke1"]  # Override global targets for this secret
     endpoint: "https://api.example.com"
     token: "generate:medium"
     config_file: "file+base64://path/to/config.json"
+    ssl_cert:  # Optional certificate
+      value: "file+base64://path/to/ssl-cert.pem"
+      optional: true
 
   aws:
     access_key: "ini://~/.aws/credentials:default:aws_access_key_id"
     secret_key: "ini://~/.aws/credentials:default:aws_secret_access_key"
     region: "ini://~/.aws/config:region"  # Uses default section
+    optional_profile:  # Optional field - skipped if not found
+      value: "ini://~/.aws/config:default:profile"
+      optional: true
 ```
 
 #### Configuration Options
@@ -140,6 +149,34 @@ Version 3.0 uses instruction-based field definitions with the following formats:
 - **`ini://path:key`**: Load value from INI file using default section (e.g., `ini://~/.aws/config:region`)
 - **`generate:policy_name`**: Generate password using specified policy
 - **`prompt:message`**: Prompt user for input during execution
+
+#### Optional Fields
+
+Any field can be marked as optional using the object syntax. Optional fields will be skipped if they fail to process (e.g., file not found, INI key missing):
+
+```yaml
+secrets:
+  myapp:
+    # Required field - will fail if file doesn't exist
+    required_cert: "file://path/to/cert.pem"
+
+    # Optional field - will be skipped if file doesn't exist
+    optional_config:
+      value: "file://path/to/optional-config.json"
+      optional: true
+
+    # Optional INI value - skipped if key is missing
+    debug_level:
+      value: "ini://~/.config/app.ini:debug:level"
+      optional: true
+
+    # Optional prompt - skipped if user cancels
+    optional_token:
+      value: "prompt:Enter optional API token (or press Enter to skip)"
+      optional: true
+```
+
+The `optional: true` flag tells the system to gracefully handle failures and continue processing other fields. Required fields (without the `optional` flag) will still cause the entire operation to fail if they cannot be processed.
 
 #### Policy Definitions
 
@@ -173,6 +210,9 @@ secrets:
     password: "prompt:Enter database password"           # User prompt (no generate: support)
     ca_cert: "file://path/to/ca.crt"                    # File content
     binary_cert: "file+base64://path/to/cert.p12"       # Base64-encoded file
+    debug_config:                                        # Optional field
+      value: "file://path/to/debug-config.json"
+      optional: true
 
   docker-registry:
     namespaces: ["default", "app1", "app2", "ci-cd"]    # Multiple namespaces
@@ -240,6 +280,9 @@ secrets:
     username: "dbuser"
     password: "prompt:Enter database password"
     host: "ini://~/.config/db.ini:default:host"
+    ssl_cert:                                            # Optional certificate
+      value: "file+base64://path/to/ssl-cert.pem"
+      optional: true
 
   api-config:
     # Uses prefix: myapp/prod/api-config

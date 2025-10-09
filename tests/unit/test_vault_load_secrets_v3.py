@@ -92,24 +92,28 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         secrets = load_secrets_v3.SecretsV3Base(module, syaml)
 
         # Test file+base64:// parsing
-        field_type, param = secrets._parse_field_instruction("file+base64://path/to/file")
+        field_type, param, is_optional = secrets._parse_field_instruction("file+base64://path/to/file")
         self.assertEqual(field_type, "file_base64")
         self.assertEqual(param, "path/to/file")
+        self.assertFalse(is_optional)
 
         # Test regular file:// parsing still works
-        field_type, param = secrets._parse_field_instruction("file://path/to/file")
+        field_type, param, is_optional = secrets._parse_field_instruction("file://path/to/file")
         self.assertEqual(field_type, "file")
         self.assertEqual(param, "path/to/file")
+        self.assertFalse(is_optional)
 
         # Test ini:// parsing
-        field_type, param = secrets._parse_field_instruction("ini://~/.aws/credentials:default:aws_access_key_id")
+        field_type, param, is_optional = secrets._parse_field_instruction("ini://~/.aws/credentials:default:aws_access_key_id")
         self.assertEqual(field_type, "ini")
         self.assertEqual(param, "~/.aws/credentials:default:aws_access_key_id")
+        self.assertFalse(is_optional)
 
         # Test static value
-        field_type, param = secrets._parse_field_instruction("static_value")
+        field_type, param, is_optional = secrets._parse_field_instruction("static_value")
         self.assertEqual(field_type, "static")
         self.assertEqual(param, "static_value")
+        self.assertFalse(is_optional)
 
     def test_get_field_value_file_base64(self, getpass):
         """Test getting field value for file+base64:// instructions"""
@@ -966,6 +970,208 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         secret_config = {}
         kms_key_id = aws_secrets_no_default._get_secret_kms_key_id(secret_config)
         self.assertIsNone(kms_key_id)
+
+    # Optional field tests
+    def test_parse_optional_field_instruction(self, getpass):
+        """Test parsing of optional field instructions"""
+        # Create a mock module and secrets instance
+        module = mock.MagicMock()
+        syaml = {"version": "3.0", "secrets": {}}
+        secrets = load_secrets_v3.SecretsV3Base(module, syaml)
+
+        # Test object form with optional=true
+        instruction = {
+            "value": "file://path/to/file",
+            "optional": True
+        }
+        field_type, param, is_optional = secrets._parse_field_instruction(instruction)
+        self.assertEqual(field_type, "file")
+        self.assertEqual(param, "path/to/file")
+        self.assertTrue(is_optional)
+
+        # Test object form with optional=false
+        instruction = {
+            "value": "prompt:Enter password",
+            "optional": False
+        }
+        field_type, param, is_optional = secrets._parse_field_instruction(instruction)
+        self.assertEqual(field_type, "prompt")
+        self.assertEqual(param, "Enter password")
+        self.assertFalse(is_optional)
+
+        # Test object form without optional (defaults to false)
+        instruction = {
+            "value": "static_value"
+        }
+        field_type, param, is_optional = secrets._parse_field_instruction(instruction)
+        self.assertEqual(field_type, "static")
+        self.assertEqual(param, "static_value")
+        self.assertFalse(is_optional)
+
+        # Test various instruction types in object form
+        instruction = {
+            "value": "file+base64://path/to/binary",
+            "optional": True
+        }
+        field_type, param, is_optional = secrets._parse_field_instruction(instruction)
+        self.assertEqual(field_type, "file_base64")
+        self.assertEqual(param, "path/to/binary")
+        self.assertTrue(is_optional)
+
+        instruction = {
+            "value": "ini://~/.config/app.ini:default:key",
+            "optional": True
+        }
+        field_type, param, is_optional = secrets._parse_field_instruction(instruction)
+        self.assertEqual(field_type, "ini")
+        self.assertEqual(param, "~/.config/app.ini:default:key")
+        self.assertTrue(is_optional)
+
+    def test_parse_optional_field_validation_errors(self, getpass):
+        """Test validation errors for optional field instructions"""
+        # Create a mock module and secrets instance
+        module = mock.MagicMock()
+        syaml = {"version": "3.0", "secrets": {}}
+        secrets = load_secrets_v3.SecretsV3Base(module, syaml)
+
+        # Test object form without value key
+        instruction = {
+            "optional": True
+        }
+        with self.assertRaises(ValueError) as cm:
+            secrets._parse_field_instruction(instruction)
+        self.assertIn("must have 'value' key", str(cm.exception))
+
+    def test_optional_field_value_handling(self, getpass):
+        """Test that optional fields return None when they fail"""
+        # Create a mock module and secrets instance
+        module = mock.MagicMock()
+        module.fail_json.side_effect = AnsibleFailJson
+        syaml = {"version": "3.0", "secrets": {}}
+        secrets = load_secrets_v3.SecretsV3Base(module, syaml)
+
+        # Test optional file that doesn't exist
+        instruction = {
+            "value": "file://nonexistent/file.txt",
+            "optional": True
+        }
+        value = secrets._get_field_value("test_secret", "test_field", instruction)
+        self.assertIsNone(value)  # Should return None, not fail
+
+        # Test required file that doesn't exist (should fail)
+        instruction = "file://nonexistent/file.txt"
+        with self.assertRaises(AnsibleFailJson):  # module.fail_json raises AnsibleFailJson
+            secrets._get_field_value("test_secret", "test_field", instruction)
+
+    def test_optional_field_ini_handling(self, getpass):
+        """Test optional INI fields"""
+        # Create a mock module and secrets instance
+        module = mock.MagicMock()
+        syaml = {"version": "3.0", "secrets": {}}
+        secrets = load_secrets_v3.SecretsV3Base(module, syaml)
+
+        # Test optional INI file that doesn't exist
+        instruction = {
+            "value": "ini://nonexistent.ini:section:key",
+            "optional": True
+        }
+        value = secrets._get_field_value("test_secret", "test_field", instruction)
+        self.assertIsNone(value)  # Should return None, not fail
+
+        # Test optional INI key that doesn't exist in existing file
+        import tempfile
+        import os
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.ini', delete=False) as f:
+            f.write("[section1]\nkey1=value1\n")
+            ini_file_path = f.name
+
+        try:
+            instruction = {
+                "value": f"ini://{ini_file_path}:section1:nonexistent_key",
+                "optional": True
+            }
+            value = secrets._get_field_value("test_secret", "test_field", instruction)
+            self.assertIsNone(value)  # Should return None, not fail
+        finally:
+            os.unlink(ini_file_path)
+
+    def test_optional_field_prompt_handling(self, getpass):
+        """Test optional prompt fields"""
+        # Create a mock module and secrets instance
+        module = mock.MagicMock()
+        syaml = {"version": "3.0", "secrets": {}}
+        secrets = load_secrets_v3.SecretsV3Base(module, syaml)
+
+        # Mock getpass to raise KeyboardInterrupt (user cancels)
+        getpass.side_effect = KeyboardInterrupt()
+
+        # Test optional prompt that gets cancelled
+        instruction = {
+            "value": "prompt:Enter optional password",
+            "optional": True
+        }
+        value = secrets._get_field_value("test_secret", "test_field", instruction)
+        self.assertIsNone(value)  # Should return None, not fail
+
+        # Reset getpass mock
+        getpass.side_effect = None
+        getpass.return_value = "test_password"
+
+    def test_optional_field_static_values_work(self, getpass):
+        """Test that optional static values work normally"""
+        # Create a mock module and secrets instance
+        module = mock.MagicMock()
+        syaml = {"version": "3.0", "secrets": {}}
+        secrets = load_secrets_v3.SecretsV3Base(module, syaml)
+
+        # Test optional static string
+        instruction = {
+            "value": "static_string_value",
+            "optional": True
+        }
+        value = secrets._get_field_value("test_secret", "test_field", instruction)
+        self.assertEqual(value, "static_string_value")
+
+        # Test optional static number
+        instruction = {
+            "value": 42,
+            "optional": True
+        }
+        value = secrets._get_field_value("test_secret", "test_field", instruction)
+        self.assertEqual(value, 42)
+
+        # Test optional static boolean
+        instruction = {
+            "value": True,
+            "optional": True
+        }
+        value = secrets._get_field_value("test_secret", "test_field", instruction)
+        self.assertTrue(value)
+
+    def test_optional_field_successful_file_read(self, getpass):
+        """Test that optional fields work normally when they succeed"""
+        # Create a mock module and secrets instance
+        module = mock.MagicMock()
+        syaml = {"version": "3.0", "secrets": {}}
+        secrets = load_secrets_v3.SecretsV3Base(module, syaml)
+
+        # Test optional file that exists
+        instruction = {
+            "value": f"file://{self.test_file}",
+            "optional": True
+        }
+        value = secrets._get_field_value("test_secret", "test_field", instruction)
+        self.assertIsNotNone(value)  # Should return actual file content
+        self.assertIn("This space intentionally left blank", value)  # Should contain file content
+
+        # Test optional file+base64 that exists
+        instruction = {
+            "value": f"file+base64://{self.test_file}",
+            "optional": True
+        }
+        value = secrets._get_field_value("test_secret", "test_field", instruction)
+        self.assertIsNotNone(value)  # Should return base64 encoded content
 
 
 if __name__ == "__main__":

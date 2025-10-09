@@ -146,22 +146,34 @@ class SecretsV3Base:
 
     def _parse_field_instruction(self, instruction):
         """Parse a field instruction into type and parameters"""
-        if not isinstance(instruction, str):
-            return "static", instruction
+        # Handle object form: {value: "instruction", optional: true}
+        if isinstance(instruction, dict):
+            if "value" not in instruction:
+                raise ValueError("Object form field instruction must have 'value' key")
+            actual_instruction = instruction["value"]
+            is_optional = instruction.get("optional", False)
+        else:
+            # Handle simple form: "instruction"
+            actual_instruction = instruction
+            is_optional = False
+
+        # Parse the actual instruction
+        if not isinstance(actual_instruction, str):
+            return "static", actual_instruction, is_optional
 
         # Check for instruction patterns
-        if instruction.startswith("file+base64://"):
-            return "file_base64", instruction[14:]  # Remove file+base64:// prefix
-        elif instruction.startswith("file://"):
-            return "file", instruction[7:]  # Remove file:// prefix
-        elif instruction.startswith("ini://"):
-            return "ini", instruction[6:]  # Remove ini:// prefix
-        elif instruction.startswith("generate:"):
-            return "generate", instruction[9:]  # Remove generate: prefix
-        elif instruction.startswith("prompt:"):
-            return "prompt", instruction[7:]  # Remove prompt: prefix
+        if actual_instruction.startswith("file+base64://"):
+            return "file_base64", actual_instruction[14:], is_optional  # Remove file+base64:// prefix
+        elif actual_instruction.startswith("file://"):
+            return "file", actual_instruction[7:], is_optional  # Remove file:// prefix
+        elif actual_instruction.startswith("ini://"):
+            return "ini", actual_instruction[6:], is_optional  # Remove ini:// prefix
+        elif actual_instruction.startswith("generate:"):
+            return "generate", actual_instruction[9:], is_optional  # Remove generate: prefix
+        elif actual_instruction.startswith("prompt:"):
+            return "prompt", actual_instruction[7:], is_optional  # Remove prompt: prefix
         else:
-            return "static", instruction
+            return "static", actual_instruction, is_optional
 
     def _validate_secrets(self):
         """Validate the V3 secrets structure"""
@@ -319,7 +331,7 @@ class SecretsV3Base:
 
     def _validate_field(self, secret_name, field_name, instruction, backing_store):
         """Validate a single field instruction"""
-        field_type, param = self._parse_field_instruction(instruction)
+        field_type, param, is_optional = self._parse_field_instruction(instruction)
 
         match field_type:
             case "static":
@@ -373,8 +385,20 @@ class SecretsV3Base:
 
     def _get_field_value(self, secret_name, field_name, instruction):
         """Get the actual value for a field based on its instruction"""
-        field_type, param = self._parse_field_instruction(instruction)
+        field_type, param, is_optional = self._parse_field_instruction(instruction)
 
+        try:
+            return self._get_field_value_internal(field_type, param, secret_name, field_name)
+        except Exception as e:
+            if is_optional:
+                # For optional fields, return None instead of failing
+                return None
+            else:
+                # For required fields, fail with original behavior
+                self.module.fail_json(str(e))
+
+    def _get_field_value_internal(self, field_type, param, secret_name, field_name):
+        """Internal method to get field value (can raise exceptions)"""
         match field_type:
             case "static":
                 return param
@@ -388,7 +412,7 @@ class SecretsV3Base:
                         return base64.b64encode(content.encode()).decode('utf-8')
                     return content
                 except Exception as e:
-                    self.module.fail_json(f"Error reading file {param}: {str(e)}")
+                    raise Exception(f"Error reading file {param}: {str(e)}")
             case "file_base64":
                 expanded_path = os.path.expanduser(param)
                 try:
@@ -397,21 +421,24 @@ class SecretsV3Base:
                     # Always base64 encode the file content
                     return base64.b64encode(content).decode('utf-8')
                 except Exception as e:
-                    self.module.fail_json(f"Error reading file {param}: {str(e)}")
+                    raise Exception(f"Error reading file {param}: {str(e)}")
             case "ini":
                 try:
                     file_path, section, key = self._parse_ini_spec(param)
                     return self._read_ini_value(file_path, section, key)
                 except Exception as e:
-                    self.module.fail_json(f"Error reading ini value {param}: {str(e)}")
+                    raise Exception(f"Error reading ini value {param}: {str(e)}")
             case "prompt":
                 prompt_text = f"{param}: "
-                return getpass.getpass(prompt_text)
+                try:
+                    return getpass.getpass(prompt_text)
+                except (KeyboardInterrupt, EOFError):
+                    raise Exception(f"Prompt cancelled for {param}")
             case "generate":
                 # This should be handled by the vault operations
                 return None
             case _:
-                self.module.fail_json(f"Unknown field type: {field_type}")
+                raise Exception(f"Unknown field type: {field_type}")
 
     def _is_binary_file(self, filepath):
         """Check if a file is binary (should be base64 encoded)"""
@@ -534,14 +561,16 @@ class LoadSecretsV3(SecretsV3Base):
 
     def _inject_field(self, secret_name, field_name, instruction, mount, targets, verb):
         """Inject a single field into vault"""
-        field_type, param = self._parse_field_instruction(instruction)
+        field_type, param, is_optional = self._parse_field_instruction(instruction)
 
         match field_type:
             case "generate":
                 self._inject_generated_field(secret_name, field_name, param, mount, targets, verb)
             case _:
                 value = self._get_field_value(secret_name, field_name, instruction)
-                self._inject_static_field(secret_name, field_name, value, mount, targets, verb)
+                if value is not None:  # Only inject if value was successfully retrieved
+                    self._inject_static_field(secret_name, field_name, value, mount, targets, verb)
+                # If value is None (optional field failed), skip this field
 
     def _inject_generated_field(self, secret_name, field_name, policy_name, mount, targets, verb):
         """Inject a generated field using vault policy"""
@@ -631,8 +660,9 @@ class LoadSecretsV3Kubernetes(SecretsV3Base):
 
             # Get the field value
             value = self._get_field_value(secret_name, field_name, instruction)
-            if value is not None:
+            if value is not None:  # Only include fields that were successfully processed
                 secret_data[field_name] = value
+            # If value is None (optional field failed), skip this field
 
         # Create secret in each namespace
         total_created = 0
@@ -779,8 +809,9 @@ class LoadSecretsV3AWS(SecretsV3Base):
 
             # Get the field value
             value = self._get_field_value(secret_key, field_name, instruction)
-            if value is not None:
+            if value is not None:  # Only include fields that were successfully processed
                 secret_data[field_name] = value
+            # If value is None (optional field failed), skip this field
 
         # Create the secret using AWS CLI
         try:
