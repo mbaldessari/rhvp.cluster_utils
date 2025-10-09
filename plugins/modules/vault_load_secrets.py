@@ -143,6 +143,7 @@ from ansible_collections.rhvp.cluster_utils.plugins.module_utils.load_secrets_v2
 )
 from ansible_collections.rhvp.cluster_utils.plugins.module_utils.load_secrets_v3 import (
     LoadSecretsV3,
+    LoadSecretsV3Kubernetes,
 )
 
 try:
@@ -197,7 +198,14 @@ def run(module):
 
     version = get_version(syaml)
     if version == "3.0":
-        secret_obj = LoadSecretsV3(module, syaml, namespace, pod)
+        # Check backing store for v3.0
+        backing_store = syaml.get("backingStore", "vault")
+        if backing_store == "vault":
+            secret_obj = LoadSecretsV3(module, syaml, namespace, pod)
+        elif backing_store == "kubernetes":
+            secret_obj = LoadSecretsV3Kubernetes(module, syaml)
+        else:
+            module.fail_json(f"Unsupported backingStore '{backing_store}' for version {version}")
     elif version == "2.0":
         secret_obj = LoadSecretsV2(module, syaml, namespace, pod)
     elif version == "1.0":

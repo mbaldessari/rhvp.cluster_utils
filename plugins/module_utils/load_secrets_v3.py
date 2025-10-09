@@ -163,8 +163,8 @@ class SecretsV3Base:
         """Validate the V3 secrets structure"""
         # Validate backing store
         backing_store = self._get_backing_store()
-        if backing_store != "vault":
-            return (False, f"Currently only the 'vault' backingStore is supported: {backing_store}")
+        if backing_store not in ["vault", "kubernetes"]:
+            return (False, f"Unsupported backingStore: {backing_store}. Supported values: vault, kubernetes")
 
         secrets = self._get_secrets()
         if len(secrets) == 0:
@@ -178,31 +178,84 @@ class SecretsV3Base:
 
         # Validate each secret
         for secret_name, secret_config in secrets.items():
-            result = self._validate_secret(secret_name, secret_config)
+            result = self._validate_secret(secret_name, secret_config, backing_store)
             if not result[0]:
                 return result
 
         return (True, "")
 
-    def _validate_secret(self, secret_name, secret_config):
+    def _validate_secret(self, secret_name, secret_config, backing_store):
         """Validate a single secret"""
         if not isinstance(secret_config, dict):
             return (False, f"Secret '{secret_name}' must be a dictionary")
 
-        # Validate targets if specified
-        if "targets" in secret_config:
-            targets = secret_config["targets"]
-            if not isinstance(targets, list) or len(targets) == 0:
-                return (False, f"Secret '{secret_name}' targets must be a non-empty list")
+        # Validate backing store specific fields
+        if backing_store == "vault":
+            # Validate targets if specified
+            if "targets" in secret_config:
+                targets = secret_config["targets"]
+                if not isinstance(targets, list) or len(targets) == 0:
+                    return (False, f"Secret '{secret_name}' targets must be a non-empty list")
+
+            # Check for kubernetes-specific fields in vault mode
+            kubernetes_fields = ["namespaces", "type", "labels", "annotations"]
+            for k_field in kubernetes_fields:
+                if k_field in secret_config:
+                    return (False, f"Secret '{secret_name}' contains kubernetes-specific field '{k_field}' but backingStore is vault")
+
+        elif backing_store == "kubernetes":
+            # Validate namespaces if specified
+            if "namespaces" in secret_config:
+                namespaces = secret_config["namespaces"]
+                if isinstance(namespaces, str):
+                    if not namespaces.strip():
+                        return (False, f"Secret '{secret_name}' namespaces cannot be empty")
+                elif isinstance(namespaces, list):
+                    if len(namespaces) == 0:
+                        return (False, f"Secret '{secret_name}' namespaces list cannot be empty")
+                    for ns in namespaces:
+                        if not isinstance(ns, str) or not ns.strip():
+                            return (False, f"Secret '{secret_name}' namespaces must be non-empty strings")
+                else:
+                    return (False, f"Secret '{secret_name}' namespaces must be a string or list of strings")
+
+            # Validate kubernetes secret type if specified
+            if "type" in secret_config:
+                secret_type = secret_config["type"]
+                if not isinstance(secret_type, str) or not secret_type.strip():
+                    return (False, f"Secret '{secret_name}' type must be a non-empty string")
+
+            # Validate labels if specified
+            if "labels" in secret_config:
+                labels = secret_config["labels"]
+                if not isinstance(labels, dict):
+                    return (False, f"Secret '{secret_name}' labels must be a dictionary")
+                for key, value in labels.items():
+                    if not isinstance(key, str) or not isinstance(value, str):
+                        return (False, f"Secret '{secret_name}' labels keys and values must be strings")
+
+            # Validate annotations if specified
+            if "annotations" in secret_config:
+                annotations = secret_config["annotations"]
+                if not isinstance(annotations, dict):
+                    return (False, f"Secret '{secret_name}' annotations must be a dictionary")
+                for key, value in annotations.items():
+                    if not isinstance(key, str) or not isinstance(value, str):
+                        return (False, f"Secret '{secret_name}' annotations keys and values must be strings")
+
+            # Check for vault-specific fields in kubernetes mode
+            if "targets" in secret_config:
+                return (False, f"Secret '{secret_name}' contains vault-specific field 'targets' but backingStore is kubernetes")
 
         # Validate fields
         field_names = []
+        reserved_fields = ["targets", "namespaces", "type", "labels", "annotations"]
         for field_name, instruction in secret_config.items():
-            if field_name == "targets":
-                continue  # Skip targets field
+            if field_name in reserved_fields:
+                continue  # Skip reserved fields
 
             field_names.append(field_name)
-            result = self._validate_field(secret_name, field_name, instruction)
+            result = self._validate_field(secret_name, field_name, instruction, backing_store)
             if not result[0]:
                 return result
 
@@ -213,7 +266,7 @@ class SecretsV3Base:
 
         return (True, "")
 
-    def _validate_field(self, secret_name, field_name, instruction):
+    def _validate_field(self, secret_name, field_name, instruction, backing_store):
         """Validate a single field instruction"""
         field_type, param = self._parse_field_instruction(instruction)
 
@@ -251,6 +304,8 @@ class SecretsV3Base:
                     return (False, f"Secret '{secret_name}' field '{field_name}' invalid ini specification: {e}")
                 return (True, "")
             case "generate":
+                if backing_store == "kubernetes":
+                    return (False, f"Secret '{secret_name}' field '{field_name}' uses 'generate:' instruction which is not supported with kubernetes backing store. Use 'prompt:' instead.")
                 if not param:
                     return (False, f"Secret '{secret_name}' field '{field_name}' has empty policy name")
                 # Check if policy exists
@@ -470,5 +525,137 @@ class LoadSecretsV3(SecretsV3Base):
             # Count fields, not secrets
             field_count = len([k for k in secret_config.keys() if k != "targets"])
             total_secrets += field_count
+
+        return total_secrets
+
+
+class LoadSecretsV3Kubernetes(SecretsV3Base):
+    """
+    V3 implementation for loading secrets into Kubernetes
+    """
+
+    def __init__(self, module, syaml):
+        super().__init__(module, syaml)
+
+    def _get_namespaces_for_secret(self, secret_config):
+        """Get the namespaces for a secret, either from config or default"""
+        if "namespaces" in secret_config:
+            namespaces = secret_config["namespaces"]
+            if isinstance(namespaces, str):
+                return [namespaces]
+            elif isinstance(namespaces, list):
+                return namespaces
+
+        # Use default namespace from settings
+        settings = self._get_settings()
+        default_namespace = settings.get("namespace", "validated-patterns-secrets")
+        return [default_namespace]
+
+    def _get_secret_type(self, secret_config):
+        """Get the Kubernetes secret type"""
+        return secret_config.get("type", "Opaque")
+
+    def _get_secret_labels(self, secret_config):
+        """Get the labels for the secret"""
+        return secret_config.get("labels", {})
+
+    def _get_secret_annotations(self, secret_config):
+        """Get the annotations for the secret"""
+        return secret_config.get("annotations", {})
+
+    def _create_kubernetes_secret(self, secret_name, secret_config):
+        """Create a Kubernetes secret"""
+        namespaces = self._get_namespaces_for_secret(secret_config)
+        secret_type = self._get_secret_type(secret_config)
+        labels = self._get_secret_labels(secret_config)
+        annotations = self._get_secret_annotations(secret_config)
+
+        # Collect secret data
+        secret_data = {}
+        reserved_fields = ["namespaces", "type", "labels", "annotations"]
+
+        for field_name, instruction in secret_config.items():
+            if field_name in reserved_fields:
+                continue
+
+            # Get the field value
+            value = self._get_field_value(secret_name, field_name, instruction)
+            if value is not None:
+                secret_data[field_name] = value
+
+        # Create secret in each namespace
+        total_created = 0
+        for namespace in namespaces:
+            result = self._create_secret_in_namespace(
+                secret_name, namespace, secret_type, labels, annotations, secret_data
+            )
+            if result:
+                total_created += 1
+
+        return total_created
+
+    def _create_secret_in_namespace(self, secret_name, namespace, secret_type, labels, annotations, secret_data):
+        """Create a single Kubernetes secret in a specific namespace"""
+        try:
+            # Prepare secret manifest
+            secret_manifest = {
+                "apiVersion": "v1",
+                "kind": "Secret",
+                "metadata": {
+                    "name": secret_name,
+                    "namespace": namespace,
+                    "labels": labels,
+                    "annotations": annotations
+                },
+                "type": secret_type,
+                "data": {}
+            }
+
+            # Encode secret data
+            import base64
+            for key, value in secret_data.items():
+                if isinstance(value, str):
+                    secret_manifest["data"][key] = base64.b64encode(value.encode('utf-8')).decode('utf-8')
+                else:
+                    # Convert non-string values to string first
+                    secret_manifest["data"][key] = base64.b64encode(str(value).encode('utf-8')).decode('utf-8')
+
+            # Use kubectl to create the secret
+            import json
+            import tempfile
+
+            # Write manifest to temporary file
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+                import yaml
+                yaml.dump(secret_manifest, f)
+                manifest_file = f.name
+
+            try:
+                # Apply the manifest using kubectl
+                cmd = f"kubectl apply -f {manifest_file}"
+                result = self.module.run_command(cmd, check_rc=False)
+
+                if result[0] == 0:
+                    return True
+                else:
+                    self.module.fail_json(f"Failed to create secret {secret_name} in namespace {namespace}: {result[2]}")
+                    return False
+            finally:
+                # Clean up temporary file
+                import os
+                os.unlink(manifest_file)
+
+        except Exception as e:
+            self.module.fail_json(f"Failed to create secret {secret_name} in namespace {namespace}: {str(e)}")
+            return False
+
+    def inject_secrets(self):
+        """Inject all secrets into Kubernetes"""
+        secrets = self._get_secrets()
+        total_secrets = 0
+
+        for secret_name, secret_config in secrets.items():
+            created_count = self._create_kubernetes_secret(secret_name, secret_config)
+            total_secrets += created_count
 
         return total_secrets

@@ -148,6 +148,64 @@ Policies support simplified configuration with three charset options:
 - `alphanumeric_symbols`: Letters, numbers, and basic symbols (!@#%^&*)
 - `all`: Letters, numbers, and extended symbols
 
+#### Kubernetes Backing Store
+
+Version 3.0 also supports a `kubernetes` backing store that creates standard Kubernetes secrets instead of storing in Vault:
+
+```yaml
+version: "3.0"
+backingStore: "kubernetes"
+
+# Simple global settings (optional)
+settings:
+  namespace: "validated-patterns-secrets"  # Default namespace if not specified per secret
+
+secrets:
+  database:
+    namespaces: "app-namespace"  # Single namespace
+    type: "Opaque"              # Optional, defaults to "Opaque"
+    labels:
+      environment: "production"
+      component: "database"
+    annotations:
+      database.io/connection-pool: "enabled"
+    username: "dbuser"                                    # Static value
+    password: "prompt:Enter database password"           # User prompt (no generate: support)
+    ca_cert: "file://path/to/ca.crt"                    # File content
+    binary_cert: "file+base64://path/to/cert.p12"       # Base64-encoded file
+
+  docker-registry:
+    namespaces: ["default", "app1", "app2", "ci-cd"]    # Multiple namespaces
+    type: "kubernetes.io/dockerconfigjson"
+    labels:
+      registry: "production"
+    .dockerconfigjson: "file+base64://~/.docker/config.json"
+
+  tls-wildcard:
+    namespaces: ["ingress-nginx", "istio-system"]
+    type: "kubernetes.io/tls"
+    labels:
+      cert-type: "wildcard"
+    tls.crt: "file://path/to/wildcard.crt"
+    tls.key: "file://path/to/wildcard.key"
+
+  # Uses default namespace from settings.namespace
+  shared-config:
+    # No namespaces specified = uses settings.namespace
+    labels:
+      shared: "true"
+    api_key: "ini://~/.config/app.ini:default:api_key"
+```
+
+**Key differences for Kubernetes backing store:**
+
+- **`namespaces`**: Accepts string or array of namespace(s) where secrets will be created
+- **`type`**: Kubernetes secret type (defaults to "Opaque")
+- **`labels`** and **`annotations`**: Standard Kubernetes metadata
+- **No `generate:` instructions**: Use `prompt:` instead for sensitive values
+- **No `targets`**: Use `namespaces` to specify where secrets are created
+- **No `policies`**: Password generation not supported
+
 ### Version 2.0
 
 Here is a version 2.0 example file (specifying `version: 2.0` is mandatory in this case):

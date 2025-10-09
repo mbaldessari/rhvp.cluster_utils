@@ -138,13 +138,13 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
 
         # Test valid file+base64:// instruction
         instruction = f"file+base64://{self.test_file}"
-        result = secrets._validate_field("test_secret", "test_field", instruction)
+        result = secrets._validate_field("test_secret", "test_field", instruction, "vault")
         self.assertTrue(result[0])
         self.assertEqual(result[1], "")
 
         # Test invalid file+base64:// instruction (non-existent file)
         instruction = "file+base64://nonexistent/file"
-        result = secrets._validate_field("test_secret", "test_field", instruction)
+        result = secrets._validate_field("test_secret", "test_field", instruction, "vault")
         self.assertFalse(result[0])
         self.assertIn("file not found", result[1])
 
@@ -157,13 +157,13 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
 
         # Test valid file+base64:// instruction with test file
         instruction = f"file+base64://{self.test_file}"
-        result = secrets._validate_field("test_secret", "test_field", instruction)
+        result = secrets._validate_field("test_secret", "test_field", instruction, "vault")
         self.assertTrue(result[0])
         self.assertEqual(result[1], "")
 
         # Test invalid file+base64:// instruction (non-existent file)
         instruction = "file+base64://nonexistent/file"
-        result = secrets._validate_field("test_secret", "test_field", instruction)
+        result = secrets._validate_field("test_secret", "test_field", instruction, "vault")
         self.assertFalse(result[0])
         self.assertIn("file not found", result[1])
 
@@ -340,19 +340,19 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
 
             # Test valid ini:// instruction
             instruction = f"ini://{ini_file_path}:default:test_key"
-            result = secrets._validate_field("test_secret", "test_field", instruction)
+            result = secrets._validate_field("test_secret", "test_field", instruction, "vault")
             self.assertTrue(result[0])
             self.assertEqual(result[1], "")
 
             # Test invalid ini:// instruction (non-existent file)
             instruction = "ini:///nonexistent/file.ini:default:key"
-            result = secrets._validate_field("test_secret", "test_field", instruction)
+            result = secrets._validate_field("test_secret", "test_field", instruction, "vault")
             self.assertFalse(result[0])
             self.assertIn("ini file not found", result[1])
 
             # Test invalid ini:// instruction (bad format)
             instruction = "ini://invalid_format"
-            result = secrets._validate_field("test_secret", "test_field", instruction)
+            result = secrets._validate_field("test_secret", "test_field", instruction, "vault")
             self.assertFalse(result[0])
             self.assertIn("invalid ini specification", result[1])
 
@@ -412,8 +412,8 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         # Test validation fails for unsupported backing store
         result = secrets._validate_secrets()
         self.assertFalse(result[0])
-        self.assertIn("Currently only the 'vault' backingStore is supported", result[1])
-        self.assertIn("consul", result[1])
+        self.assertIn("Unsupported backingStore: consul", result[1])
+        self.assertIn("Supported values: vault, kubernetes", result[1])
 
     def test_validate_backing_store_default_works(self, getpass):
         """Test that validation works when backingStore is not specified (uses default)"""
@@ -429,6 +429,260 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         result = secrets._validate_secrets()
         self.assertTrue(result[0])
         self.assertEqual(result[1], "")
+
+    # Kubernetes backing store tests
+    def test_kubernetes_backing_store_validation(self, getpass):
+        """Test that kubernetes backing store validates correctly"""
+        # Create a mock module and secrets instance
+        module = mock.MagicMock()
+        syaml = {
+            "version": "3.0",
+            "backingStore": "kubernetes",
+            "secrets": {"test_secret": {"field1": "value1"}}
+        }
+        secrets = load_secrets_v3.SecretsV3Base(module, syaml)
+
+        # Test validation passes for kubernetes
+        result = secrets._validate_secrets()
+        self.assertTrue(result[0])
+        self.assertEqual(result[1], "")
+
+    def test_kubernetes_backing_store_rejects_generate(self, getpass):
+        """Test that kubernetes backing store rejects generate: instructions"""
+        # Create a mock module and secrets instance
+        module = mock.MagicMock()
+        syaml = {
+            "version": "3.0",
+            "backingStore": "kubernetes",
+            "secrets": {"test_secret": {"password": "generate:strong"}}
+        }
+        secrets = load_secrets_v3.SecretsV3Base(module, syaml)
+
+        # Test validation fails for generate instruction
+        result = secrets._validate_secrets()
+        self.assertFalse(result[0])
+        self.assertIn("generate:", result[1])
+        self.assertIn("not supported with kubernetes backing store", result[1])
+
+    def test_kubernetes_backing_store_rejects_vault_fields(self, getpass):
+        """Test that kubernetes backing store rejects vault-specific fields"""
+        # Create a mock module and secrets instance
+        module = mock.MagicMock()
+        syaml = {
+            "version": "3.0",
+            "backingStore": "kubernetes",
+            "secrets": {"test_secret": {"targets": ["hub"], "field1": "value1"}}
+        }
+        secrets = load_secrets_v3.SecretsV3Base(module, syaml)
+
+        # Test validation fails for targets field
+        result = secrets._validate_secrets()
+        self.assertFalse(result[0])
+        self.assertIn("vault-specific field 'targets'", result[1])
+
+    def test_vault_backing_store_rejects_kubernetes_fields(self, getpass):
+        """Test that vault backing store rejects kubernetes-specific fields"""
+        # Create a mock module and secrets instance
+        module = mock.MagicMock()
+        syaml = {
+            "version": "3.0",
+            "backingStore": "vault",
+            "secrets": {"test_secret": {"namespaces": ["default"], "field1": "value1"}}
+        }
+        secrets = load_secrets_v3.SecretsV3Base(module, syaml)
+
+        # Test validation fails for namespaces field
+        result = secrets._validate_secrets()
+        self.assertFalse(result[0])
+        self.assertIn("kubernetes-specific field 'namespaces'", result[1])
+
+    def test_kubernetes_namespaces_validation(self, getpass):
+        """Test kubernetes namespaces field validation"""
+        # Create a mock module and secrets instance
+        module = mock.MagicMock()
+
+        # Test single namespace string
+        syaml = {
+            "version": "3.0",
+            "backingStore": "kubernetes",
+            "secrets": {"test_secret": {"namespaces": "app-namespace", "field1": "value1"}}
+        }
+        secrets = load_secrets_v3.SecretsV3Base(module, syaml)
+        result = secrets._validate_secrets()
+        self.assertTrue(result[0])
+
+        # Test multiple namespaces array
+        syaml = {
+            "version": "3.0",
+            "backingStore": "kubernetes",
+            "secrets": {"test_secret": {"namespaces": ["default", "app1", "app2"], "field1": "value1"}}
+        }
+        secrets = load_secrets_v3.SecretsV3Base(module, syaml)
+        result = secrets._validate_secrets()
+        self.assertTrue(result[0])
+
+        # Test empty namespace string
+        syaml = {
+            "version": "3.0",
+            "backingStore": "kubernetes",
+            "secrets": {"test_secret": {"namespaces": "", "field1": "value1"}}
+        }
+        secrets = load_secrets_v3.SecretsV3Base(module, syaml)
+        result = secrets._validate_secrets()
+        self.assertFalse(result[0])
+        self.assertIn("namespaces cannot be empty", result[1])
+
+        # Test empty namespaces array
+        syaml = {
+            "version": "3.0",
+            "backingStore": "kubernetes",
+            "secrets": {"test_secret": {"namespaces": [], "field1": "value1"}}
+        }
+        secrets = load_secrets_v3.SecretsV3Base(module, syaml)
+        result = secrets._validate_secrets()
+        self.assertFalse(result[0])
+        self.assertIn("namespaces list cannot be empty", result[1])
+
+    def test_kubernetes_labels_annotations_validation(self, getpass):
+        """Test kubernetes labels and annotations validation"""
+        # Create a mock module and secrets instance
+        module = mock.MagicMock()
+
+        # Test valid labels and annotations
+        syaml = {
+            "version": "3.0",
+            "backingStore": "kubernetes",
+            "secrets": {
+                "test_secret": {
+                    "namespaces": "default",
+                    "labels": {"app": "myapp", "env": "prod"},
+                    "annotations": {"description": "test secret"},
+                    "field1": "value1"
+                }
+            }
+        }
+        secrets = load_secrets_v3.SecretsV3Base(module, syaml)
+        result = secrets._validate_secrets()
+        self.assertTrue(result[0])
+
+        # Test invalid labels (non-dict)
+        syaml = {
+            "version": "3.0",
+            "backingStore": "kubernetes",
+            "secrets": {"test_secret": {"namespaces": "default", "labels": "invalid", "field1": "value1"}}
+        }
+        secrets = load_secrets_v3.SecretsV3Base(module, syaml)
+        result = secrets._validate_secrets()
+        self.assertFalse(result[0])
+        self.assertIn("labels must be a dictionary", result[1])
+
+        # Test invalid annotations (non-dict)
+        syaml = {
+            "version": "3.0",
+            "backingStore": "kubernetes",
+            "secrets": {"test_secret": {"namespaces": "default", "annotations": "invalid", "field1": "value1"}}
+        }
+        secrets = load_secrets_v3.SecretsV3Base(module, syaml)
+        result = secrets._validate_secrets()
+        self.assertFalse(result[0])
+        self.assertIn("annotations must be a dictionary", result[1])
+
+    def test_kubernetes_secret_type_validation(self, getpass):
+        """Test kubernetes secret type validation"""
+        # Create a mock module and secrets instance
+        module = mock.MagicMock()
+
+        # Test valid type
+        syaml = {
+            "version": "3.0",
+            "backingStore": "kubernetes",
+            "secrets": {"test_secret": {"namespaces": "default", "type": "Opaque", "field1": "value1"}}
+        }
+        secrets = load_secrets_v3.SecretsV3Base(module, syaml)
+        result = secrets._validate_secrets()
+        self.assertTrue(result[0])
+
+        # Test empty type
+        syaml = {
+            "version": "3.0",
+            "backingStore": "kubernetes",
+            "secrets": {"test_secret": {"namespaces": "default", "type": "", "field1": "value1"}}
+        }
+        secrets = load_secrets_v3.SecretsV3Base(module, syaml)
+        result = secrets._validate_secrets()
+        self.assertFalse(result[0])
+        self.assertIn("type must be a non-empty string", result[1])
+
+    def test_get_namespaces_for_secret(self, getpass):
+        """Test getting namespaces for kubernetes secrets"""
+        # Create a mock module and kubernetes secrets instance
+        module = mock.MagicMock()
+        syaml = {"version": "3.0", "backingStore": "kubernetes", "secrets": {}}
+        k8s_secrets = load_secrets_v3.LoadSecretsV3Kubernetes(module, syaml)
+
+        # Test single namespace string
+        secret_config = {"namespaces": "app-namespace"}
+        namespaces = k8s_secrets._get_namespaces_for_secret(secret_config)
+        self.assertEqual(namespaces, ["app-namespace"])
+
+        # Test multiple namespaces array
+        secret_config = {"namespaces": ["default", "app1", "app2"]}
+        namespaces = k8s_secrets._get_namespaces_for_secret(secret_config)
+        self.assertEqual(namespaces, ["default", "app1", "app2"])
+
+        # Test default namespace when not specified
+        secret_config = {}
+        namespaces = k8s_secrets._get_namespaces_for_secret(secret_config)
+        self.assertEqual(namespaces, ["validated-patterns-secrets"])
+
+        # Test default namespace from settings
+        syaml_with_settings = {
+            "version": "3.0",
+            "backingStore": "kubernetes",
+            "settings": {"namespace": "custom-namespace"},
+            "secrets": {}
+        }
+        k8s_secrets_custom = load_secrets_v3.LoadSecretsV3Kubernetes(module, syaml_with_settings)
+        secret_config = {}
+        namespaces = k8s_secrets_custom._get_namespaces_for_secret(secret_config)
+        self.assertEqual(namespaces, ["custom-namespace"])
+
+    def test_get_secret_metadata(self, getpass):
+        """Test getting secret metadata for kubernetes"""
+        # Create a mock module and kubernetes secrets instance
+        module = mock.MagicMock()
+        syaml = {"version": "3.0", "backingStore": "kubernetes", "secrets": {}}
+        k8s_secrets = load_secrets_v3.LoadSecretsV3Kubernetes(module, syaml)
+
+        # Test secret type
+        secret_config = {"type": "kubernetes.io/tls"}
+        secret_type = k8s_secrets._get_secret_type(secret_config)
+        self.assertEqual(secret_type, "kubernetes.io/tls")
+
+        # Test default type
+        secret_config = {}
+        secret_type = k8s_secrets._get_secret_type(secret_config)
+        self.assertEqual(secret_type, "Opaque")
+
+        # Test labels
+        secret_config = {"labels": {"app": "myapp", "env": "prod"}}
+        labels = k8s_secrets._get_secret_labels(secret_config)
+        self.assertEqual(labels, {"app": "myapp", "env": "prod"})
+
+        # Test default labels
+        secret_config = {}
+        labels = k8s_secrets._get_secret_labels(secret_config)
+        self.assertEqual(labels, {})
+
+        # Test annotations
+        secret_config = {"annotations": {"description": "test secret"}}
+        annotations = k8s_secrets._get_secret_annotations(secret_config)
+        self.assertEqual(annotations, {"description": "test secret"})
+
+        # Test default annotations
+        secret_config = {}
+        annotations = k8s_secrets._get_secret_annotations(secret_config)
+        self.assertEqual(annotations, {})
 
 
 if __name__ == "__main__":
