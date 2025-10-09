@@ -80,6 +80,9 @@ Version 3.0 introduces a simplified syntax with instruction-based field definiti
 ```yaml
 version: "3.0"
 
+# Backing store type (optional, defaults to "vault")
+backingStore: "vault"
+
 # Global settings (optional)
 settings:
   targets: ["hub", "spoke1"]  # Default targets for all secrets
@@ -121,6 +124,10 @@ secrets:
     secret_key: "ini://~/.aws/credentials:default:aws_secret_access_key"
     region: "ini://~/.aws/config:region"  # Uses default section
 ```
+
+#### Configuration Options
+
+**backingStore** (optional): Specifies the type of secrets storage backend. Defaults to `"vault"` and currently only supports Vault. This field provides future flexibility for adding support for other secret storage providers.
 
 #### Field Instructions
 

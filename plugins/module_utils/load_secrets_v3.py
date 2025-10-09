@@ -94,6 +94,10 @@ class SecretsV3Base:
             "namespace": settings.get("namespace", "validated-patterns-secrets")
         }
 
+    def _get_backing_store(self):
+        """Get backing store with default"""
+        return self.syaml.get("backingStore", "vault")
+
     def _get_secrets(self):
         """Get secrets dictionary"""
         return self.syaml.get("secrets", {})
@@ -157,6 +161,11 @@ class SecretsV3Base:
 
     def _validate_secrets(self):
         """Validate the V3 secrets structure"""
+        # Validate backing store
+        backing_store = self._get_backing_store()
+        if backing_store != "vault":
+            return (False, f"Currently only the 'vault' backingStore is supported: {backing_store}")
+
         secrets = self._get_secrets()
         if len(secrets) == 0:
             self.module.fail_json("No secrets found")

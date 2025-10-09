@@ -360,6 +360,76 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
             # Clean up
             os.unlink(ini_file_path)
 
+    def test_get_backing_store_default(self, getpass):
+        """Test that backingStore defaults to 'vault' when not specified"""
+        # Create a mock module and secrets instance
+        module = mock.MagicMock()
+        syaml = {"version": "3.0", "secrets": {}}
+        secrets = load_secrets_v3.SecretsV3Base(module, syaml)
+
+        # Test default backing store
+        backing_store = secrets._get_backing_store()
+        self.assertEqual(backing_store, "vault")
+
+    def test_get_backing_store_explicit(self, getpass):
+        """Test that backingStore returns explicit value when specified"""
+        # Create a mock module and secrets instance
+        module = mock.MagicMock()
+        syaml = {"version": "3.0", "backingStore": "vault", "secrets": {}}
+        secrets = load_secrets_v3.SecretsV3Base(module, syaml)
+
+        # Test explicit backing store
+        backing_store = secrets._get_backing_store()
+        self.assertEqual(backing_store, "vault")
+
+    def test_validate_backing_store_vault_supported(self, getpass):
+        """Test that 'vault' backing store is valid"""
+        # Create a mock module and secrets instance
+        module = mock.MagicMock()
+        syaml = {
+            "version": "3.0",
+            "backingStore": "vault",
+            "secrets": {"test_secret": {"field1": "value1"}}
+        }
+        secrets = load_secrets_v3.SecretsV3Base(module, syaml)
+
+        # Test validation passes for vault
+        result = secrets._validate_secrets()
+        self.assertTrue(result[0])
+        self.assertEqual(result[1], "")
+
+    def test_validate_backing_store_unsupported(self, getpass):
+        """Test that unsupported backing stores are rejected"""
+        # Create a mock module and secrets instance
+        module = mock.MagicMock()
+        syaml = {
+            "version": "3.0",
+            "backingStore": "consul",
+            "secrets": {"test_secret": {"field1": "value1"}}
+        }
+        secrets = load_secrets_v3.SecretsV3Base(module, syaml)
+
+        # Test validation fails for unsupported backing store
+        result = secrets._validate_secrets()
+        self.assertFalse(result[0])
+        self.assertIn("Currently only the 'vault' backingStore is supported", result[1])
+        self.assertIn("consul", result[1])
+
+    def test_validate_backing_store_default_works(self, getpass):
+        """Test that validation works when backingStore is not specified (uses default)"""
+        # Create a mock module and secrets instance
+        module = mock.MagicMock()
+        syaml = {
+            "version": "3.0",
+            "secrets": {"test_secret": {"field1": "value1"}}
+        }
+        secrets = load_secrets_v3.SecretsV3Base(module, syaml)
+
+        # Test validation passes with default backing store
+        result = secrets._validate_secrets()
+        self.assertTrue(result[0])
+        self.assertEqual(result[1], "")
+
 
 if __name__ == "__main__":
     unittest.main()
