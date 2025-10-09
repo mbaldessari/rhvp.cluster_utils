@@ -80,8 +80,8 @@ Version 3.0 introduces a simplified syntax with instruction-based field definiti
 ```yaml
 version: "3.0"
 
-# Backing store type (optional, defaults to "vault")
-backingStore: "vault"
+# Secret store type (optional, defaults to "vault")
+secretstore: "vault"
 
 # Global settings (optional)
 settings:
@@ -135,7 +135,51 @@ secrets:
 
 #### Configuration Options
 
-**backingStore** (optional): Specifies the type of secrets storage backend. Defaults to `"vault"` and currently only supports Vault. This field provides future flexibility for adding support for other secret storage providers.
+**secretstore** (optional): Specifies the type of secrets storage backend. Defaults to `"vault"`. Supported values: `vault`, `kubernetes`, `aws-secrets-manager`.
+
+#### Quick Examples
+
+**Vault Secret Store:**
+```yaml
+version: "3.0"
+secretstore: "vault"
+secrets:
+  database:
+    username: "dbuser"
+    password: "generate:strong"
+    ca_cert: "file://path/to/ca.crt"
+```
+
+**Kubernetes Secret Store:**
+```yaml
+version: "3.0"
+secretstore: "kubernetes"
+secrets:
+  database:
+    namespaces: ["app-namespace"]
+    type: "Opaque"
+    username: "dbuser"
+    password: "prompt:Enter password"
+```
+
+**AWS Secrets Manager:**
+```yaml
+version: "3.0"
+secretstore: "aws-secrets-manager"
+awsConfig:
+  region: "us-east-1"
+  profile: "default"
+  prefix: "myapp/prod/"
+  defaultTags:
+    Environment: "production"
+    ManagedBy: "validated-patterns"
+secrets:
+  database:
+    secretName: "rds/credentials"
+    description: "Database credentials"
+    username: "dbuser"
+    password: "prompt:Enter password"
+```
 
 #### Field Instructions
 
@@ -184,13 +228,13 @@ Policies support simplified configuration with three charset options:
 - `alphanumeric_symbols`: Letters, numbers, and basic symbols (!@#%^&*)
 - `all`: Letters, numbers, and extended symbols
 
-#### Kubernetes Backing Store
+#### Kubernetes Secret Store
 
-Version 3.0 also supports a `kubernetes` backing store that creates standard Kubernetes secrets instead of storing in Vault:
+Version 3.0 also supports a `kubernetes` secret store that creates standard Kubernetes secrets instead of storing in Vault:
 
 ```yaml
 version: "3.0"
-backingStore: "kubernetes"
+secretstore: "kubernetes"
 
 # Simple global settings (optional)
 settings:
@@ -236,7 +280,7 @@ secrets:
     api_key: "ini://~/.config/app.ini:default:api_key"
 ```
 
-**Key differences for Kubernetes backing store:**
+**Key differences for Kubernetes secret store:**
 
 - **`namespaces`**: Accepts string or array of namespace(s) where secrets will be created
 - **`type`**: Kubernetes secret type (defaults to "Opaque")
@@ -245,13 +289,13 @@ secrets:
 - **No `targets`**: Use `namespaces` to specify where secrets are created
 - **No `policies`**: Password generation not supported
 
-#### AWS Secrets Manager Backing Store
+#### AWS Secrets Manager Secret Store
 
-Version 3.0 also supports an `aws-secrets-manager` backing store that creates secrets in AWS Secrets Manager:
+Version 3.0 also supports an `aws-secrets-manager` secret store that creates secrets in AWS Secrets Manager:
 
 ```yaml
 version: "3.0"
-backingStore: "aws-secrets-manager"
+secretstore: "aws-secrets-manager"
 
 # AWS-specific configuration
 awsConfig:
@@ -302,7 +346,7 @@ secrets:
     password: "prompt:Enter initial password"
 ```
 
-**Key features for AWS Secrets Manager backing store:**
+**Key features for AWS Secrets Manager secret store:**
 
 - **`secretName`**: Custom secret name (defaults to YAML key)
 - **`description`**: Human-readable description for the secret
@@ -332,7 +376,7 @@ Here is a version 2.0 example file (specifying `version: 2.0` is mandatory in th
 # Needed to specify the new format (missing version means old version: 1.0 by default)
 version: 2.0
 
-backingStore: vault # 'vault' is the default when omitted
+secretstore: vault # 'vault' is the default when omitted
 
 # These are the vault policies to be created in the vault
 # these are used when we let the vault generate the passwords

@@ -87,7 +87,7 @@ class SecretsV3Base:
 
     def _get_backing_store(self):
         """Get backing store with default"""
-        return self.syaml.get("backingStore", "vault")
+        return self.syaml.get("secretstore", "vault")
 
     def _get_aws_config(self):
         """Get AWS configuration"""
@@ -185,7 +185,7 @@ class SecretsV3Base:
         if backing_store not in ["vault", "kubernetes", "aws-secrets-manager"]:
             return (
                 False,
-                f"Unsupported backingStore: {backing_store}. Supported values: vault, kubernetes, aws-secrets-manager",
+                f"Unsupported secretstore: {backing_store}. Supported values: vault, kubernetes, aws-secrets-manager",
             )
 
         secrets = self._get_secrets()
@@ -228,7 +228,7 @@ class SecretsV3Base:
                 if k_field in secret_config:
                     return (
                         False,
-                        f"Secret '{secret_name}' contains kubernetes-specific field '{k_field}' but backingStore is vault",
+                        f"Secret '{secret_name}' contains kubernetes-specific field '{k_field}' but secretstore is vault",
                     )
 
         elif backing_store == "kubernetes":
@@ -302,7 +302,7 @@ class SecretsV3Base:
             if "targets" in secret_config:
                 return (
                     False,
-                    f"Secret '{secret_name}' contains vault-specific field 'targets' but backingStore is kubernetes",
+                    f"Secret '{secret_name}' contains vault-specific field 'targets' but secretstore is kubernetes",
                 )
 
         elif backing_store == "aws-secrets-manager":
@@ -379,7 +379,7 @@ class SecretsV3Base:
                 if field in secret_config:
                     return (
                         False,
-                        f"Secret '{secret_name}' contains field '{field}' which is not supported with aws-secrets-manager backing store",
+                        f"Secret '{secret_name}' contains field '{field}' which is not supported with aws-secrets-manager secretstore",
                     )
 
         # Validate fields
@@ -479,7 +479,7 @@ class SecretsV3Base:
                 if backing_store in ["kubernetes", "aws-secrets-manager"]:
                     return (
                         False,
-                        f"Secret '{secret_name}' field '{field_name}' uses 'generate:' instruction which is not supported with {backing_store} backing store. Use 'prompt:' instead.",
+                        f"Secret '{secret_name}' field '{field_name}' uses 'generate:' instruction which is not supported with {backing_store} secretstore. Use 'prompt:' instead.",
                     )
                 if not param:
                     return (

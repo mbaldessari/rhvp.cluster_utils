@@ -200,7 +200,7 @@ def run(module):
     version = get_version(syaml)
     if version == "3.0":
         # Check backing store for v3.0
-        backing_store = syaml.get("backingStore", "vault")
+        backing_store = syaml.get("secretstore", "vault")
         if backing_store == "vault":
             secret_obj = LoadSecretsV3(module, syaml, namespace, pod)
         elif backing_store == "kubernetes":
@@ -209,7 +209,7 @@ def run(module):
             secret_obj = LoadSecretsV3AWS(module, syaml)
         else:
             module.fail_json(
-                f"Unsupported backingStore '{backing_store}' for version {version}"
+                f"Unsupported secretstore '{backing_store}' for version {version}"
             )
     elif version == "2.0":
         secret_obj = LoadSecretsV2(module, syaml, namespace, pod)

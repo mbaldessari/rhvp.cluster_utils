@@ -392,34 +392,34 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
             os.unlink(ini_file_path)
 
     def test_get_backing_store_default(self, getpass):
-        """Test that backingStore defaults to 'vault' when not specified"""
+        """Test that secretstore defaults to 'vault' when not specified"""
         # Create a mock module and secrets instance
         module = mock.MagicMock()
         syaml = {"version": "3.0", "secrets": {}}
         secrets = load_secrets_v3.SecretsV3Base(module, syaml)
 
-        # Test default backing store
+        # Test default secretstore
         backing_store = secrets._get_backing_store()
         self.assertEqual(backing_store, "vault")
 
     def test_get_backing_store_explicit(self, getpass):
-        """Test that backingStore returns explicit value when specified"""
+        """Test that secretstore returns explicit value when specified"""
         # Create a mock module and secrets instance
         module = mock.MagicMock()
-        syaml = {"version": "3.0", "backingStore": "vault", "secrets": {}}
+        syaml = {"version": "3.0", "secretstore": "vault", "secrets": {}}
         secrets = load_secrets_v3.SecretsV3Base(module, syaml)
 
-        # Test explicit backing store
+        # Test explicit secretstore
         backing_store = secrets._get_backing_store()
         self.assertEqual(backing_store, "vault")
 
     def test_validate_backing_store_vault_supported(self, getpass):
-        """Test that 'vault' backing store is valid"""
+        """Test that 'vault' secretstore is valid"""
         # Create a mock module and secrets instance
         module = mock.MagicMock()
         syaml = {
             "version": "3.0",
-            "backingStore": "vault",
+            "secretstore": "vault",
             "secrets": {"test_secret": {"field1": "value1"}},
         }
         secrets = load_secrets_v3.SecretsV3Base(module, syaml)
@@ -430,44 +430,44 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         self.assertEqual(result[1], "")
 
     def test_validate_backing_store_unsupported(self, getpass):
-        """Test that unsupported backing stores are rejected"""
+        """Test that unsupported secretstores are rejected"""
         # Create a mock module and secrets instance
         module = mock.MagicMock()
         syaml = {
             "version": "3.0",
-            "backingStore": "consul",
+            "secretstore": "consul",
             "secrets": {"test_secret": {"field1": "value1"}},
         }
         secrets = load_secrets_v3.SecretsV3Base(module, syaml)
 
-        # Test validation fails for unsupported backing store
+        # Test validation fails for unsupported secretstore
         result = secrets._validate_secrets()
         self.assertFalse(result[0])
-        self.assertIn("Unsupported backingStore: consul", result[1])
+        self.assertIn("Unsupported secretstore: consul", result[1])
         self.assertIn(
             "Supported values: vault, kubernetes, aws-secrets-manager", result[1]
         )
 
     def test_validate_backing_store_default_works(self, getpass):
-        """Test that validation works when backingStore is not specified (uses default)"""
+        """Test that validation works when secretstore is not specified (uses default)"""
         # Create a mock module and secrets instance
         module = mock.MagicMock()
         syaml = {"version": "3.0", "secrets": {"test_secret": {"field1": "value1"}}}
         secrets = load_secrets_v3.SecretsV3Base(module, syaml)
 
-        # Test validation passes with default backing store
+        # Test validation passes with default secretstore
         result = secrets._validate_secrets()
         self.assertTrue(result[0])
         self.assertEqual(result[1], "")
 
-    # Kubernetes backing store tests
+    # Kubernetes secretstore tests
     def test_kubernetes_backing_store_validation(self, getpass):
-        """Test that kubernetes backing store validates correctly"""
+        """Test that kubernetes secretstore validates correctly"""
         # Create a mock module and secrets instance
         module = mock.MagicMock()
         syaml = {
             "version": "3.0",
-            "backingStore": "kubernetes",
+            "secretstore": "kubernetes",
             "secrets": {"test_secret": {"field1": "value1"}},
         }
         secrets = load_secrets_v3.SecretsV3Base(module, syaml)
@@ -478,12 +478,12 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         self.assertEqual(result[1], "")
 
     def test_kubernetes_backing_store_rejects_generate(self, getpass):
-        """Test that kubernetes backing store rejects generate: instructions"""
+        """Test that kubernetes secretstore rejects generate: instructions"""
         # Create a mock module and secrets instance
         module = mock.MagicMock()
         syaml = {
             "version": "3.0",
-            "backingStore": "kubernetes",
+            "secretstore": "kubernetes",
             "secrets": {"test_secret": {"password": "generate:strong"}},
         }
         secrets = load_secrets_v3.SecretsV3Base(module, syaml)
@@ -492,15 +492,15 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         result = secrets._validate_secrets()
         self.assertFalse(result[0])
         self.assertIn("generate:", result[1])
-        self.assertIn("not supported with kubernetes backing store", result[1])
+        self.assertIn("not supported with kubernetes secretstore", result[1])
 
     def test_kubernetes_backing_store_rejects_vault_fields(self, getpass):
-        """Test that kubernetes backing store rejects vault-specific fields"""
+        """Test that kubernetes secretstore rejects vault-specific fields"""
         # Create a mock module and secrets instance
         module = mock.MagicMock()
         syaml = {
             "version": "3.0",
-            "backingStore": "kubernetes",
+            "secretstore": "kubernetes",
             "secrets": {"test_secret": {"targets": ["hub"], "field1": "value1"}},
         }
         secrets = load_secrets_v3.SecretsV3Base(module, syaml)
@@ -511,12 +511,12 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         self.assertIn("vault-specific field 'targets'", result[1])
 
     def test_vault_backing_store_rejects_kubernetes_fields(self, getpass):
-        """Test that vault backing store rejects kubernetes-specific fields"""
+        """Test that vault secretstore rejects kubernetes-specific fields"""
         # Create a mock module and secrets instance
         module = mock.MagicMock()
         syaml = {
             "version": "3.0",
-            "backingStore": "vault",
+            "secretstore": "vault",
             "secrets": {"test_secret": {"namespaces": ["default"], "field1": "value1"}},
         }
         secrets = load_secrets_v3.SecretsV3Base(module, syaml)
@@ -534,7 +534,7 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         # Test single namespace string
         syaml = {
             "version": "3.0",
-            "backingStore": "kubernetes",
+            "secretstore": "kubernetes",
             "secrets": {
                 "test_secret": {"namespaces": "app-namespace", "field1": "value1"}
             },
@@ -546,7 +546,7 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         # Test multiple namespaces array
         syaml = {
             "version": "3.0",
-            "backingStore": "kubernetes",
+            "secretstore": "kubernetes",
             "secrets": {
                 "test_secret": {
                     "namespaces": ["default", "app1", "app2"],
@@ -561,7 +561,7 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         # Test empty namespace string
         syaml = {
             "version": "3.0",
-            "backingStore": "kubernetes",
+            "secretstore": "kubernetes",
             "secrets": {"test_secret": {"namespaces": "", "field1": "value1"}},
         }
         secrets = load_secrets_v3.SecretsV3Base(module, syaml)
@@ -572,7 +572,7 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         # Test empty namespaces array
         syaml = {
             "version": "3.0",
-            "backingStore": "kubernetes",
+            "secretstore": "kubernetes",
             "secrets": {"test_secret": {"namespaces": [], "field1": "value1"}},
         }
         secrets = load_secrets_v3.SecretsV3Base(module, syaml)
@@ -588,7 +588,7 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         # Test valid labels and annotations
         syaml = {
             "version": "3.0",
-            "backingStore": "kubernetes",
+            "secretstore": "kubernetes",
             "secrets": {
                 "test_secret": {
                     "namespaces": "default",
@@ -605,7 +605,7 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         # Test invalid labels (non-dict)
         syaml = {
             "version": "3.0",
-            "backingStore": "kubernetes",
+            "secretstore": "kubernetes",
             "secrets": {
                 "test_secret": {
                     "namespaces": "default",
@@ -622,7 +622,7 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         # Test invalid annotations (non-dict)
         syaml = {
             "version": "3.0",
-            "backingStore": "kubernetes",
+            "secretstore": "kubernetes",
             "secrets": {
                 "test_secret": {
                     "namespaces": "default",
@@ -644,7 +644,7 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         # Test valid type
         syaml = {
             "version": "3.0",
-            "backingStore": "kubernetes",
+            "secretstore": "kubernetes",
             "secrets": {
                 "test_secret": {
                     "namespaces": "default",
@@ -660,7 +660,7 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         # Test empty type
         syaml = {
             "version": "3.0",
-            "backingStore": "kubernetes",
+            "secretstore": "kubernetes",
             "secrets": {
                 "test_secret": {"namespaces": "default", "type": "", "field1": "value1"}
             },
@@ -674,7 +674,7 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         """Test getting namespaces for kubernetes secrets"""
         # Create a mock module and kubernetes secrets instance
         module = mock.MagicMock()
-        syaml = {"version": "3.0", "backingStore": "kubernetes", "secrets": {}}
+        syaml = {"version": "3.0", "secretstore": "kubernetes", "secrets": {}}
         k8s_secrets = load_secrets_v3.LoadSecretsV3Kubernetes(module, syaml)
 
         # Test single namespace string
@@ -695,7 +695,7 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         # Test default namespace from settings
         syaml_with_settings = {
             "version": "3.0",
-            "backingStore": "kubernetes",
+            "secretstore": "kubernetes",
             "settings": {"namespace": "custom-namespace"},
             "secrets": {},
         }
@@ -710,7 +710,7 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         """Test getting secret metadata for kubernetes"""
         # Create a mock module and kubernetes secrets instance
         module = mock.MagicMock()
-        syaml = {"version": "3.0", "backingStore": "kubernetes", "secrets": {}}
+        syaml = {"version": "3.0", "secretstore": "kubernetes", "secrets": {}}
         k8s_secrets = load_secrets_v3.LoadSecretsV3Kubernetes(module, syaml)
 
         # Test secret type
@@ -743,14 +743,14 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         annotations = k8s_secrets._get_secret_annotations(secret_config)
         self.assertEqual(annotations, {})
 
-    # AWS Secrets Manager backing store tests
+    # AWS Secrets Manager secretstore tests
     def test_aws_backing_store_validation(self, getpass):
-        """Test that AWS Secrets Manager backing store validates correctly"""
+        """Test that AWS Secrets Manager secretstore validates correctly"""
         # Create a mock module and secrets instance
         module = mock.MagicMock()
         syaml = {
             "version": "3.0",
-            "backingStore": "aws-secrets-manager",
+            "secretstore": "aws-secrets-manager",
             "secrets": {"test_secret": {"field1": "value1"}},
         }
         secrets = load_secrets_v3.SecretsV3Base(module, syaml)
@@ -761,12 +761,12 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         self.assertEqual(result[1], "")
 
     def test_aws_backing_store_rejects_generate(self, getpass):
-        """Test that AWS backing store rejects generate: instructions"""
+        """Test that AWS secretstore rejects generate: instructions"""
         # Create a mock module and secrets instance
         module = mock.MagicMock()
         syaml = {
             "version": "3.0",
-            "backingStore": "aws-secrets-manager",
+            "secretstore": "aws-secrets-manager",
             "secrets": {"test_secret": {"password": "generate:strong"}},
         }
         secrets = load_secrets_v3.SecretsV3Base(module, syaml)
@@ -775,34 +775,34 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         result = secrets._validate_secrets()
         self.assertFalse(result[0])
         self.assertIn("generate:", result[1])
-        self.assertIn("not supported with aws-secrets-manager backing store", result[1])
+        self.assertIn("not supported with aws-secrets-manager secretstore", result[1])
 
     def test_aws_backing_store_rejects_other_fields(self, getpass):
-        """Test that AWS backing store rejects vault/kubernetes-specific fields"""
+        """Test that AWS secretstore rejects vault/kubernetes-specific fields"""
         # Create a mock module and secrets instance
         module = mock.MagicMock()
 
         # Test rejects vault targets
         syaml = {
             "version": "3.0",
-            "backingStore": "aws-secrets-manager",
+            "secretstore": "aws-secrets-manager",
             "secrets": {"test_secret": {"targets": ["hub"], "field1": "value1"}},
         }
         secrets = load_secrets_v3.SecretsV3Base(module, syaml)
         result = secrets._validate_secrets()
         self.assertFalse(result[0])
-        self.assertIn("not supported with aws-secrets-manager backing store", result[1])
+        self.assertIn("not supported with aws-secrets-manager secretstore", result[1])
 
         # Test rejects kubernetes namespaces
         syaml = {
             "version": "3.0",
-            "backingStore": "aws-secrets-manager",
+            "secretstore": "aws-secrets-manager",
             "secrets": {"test_secret": {"namespaces": ["default"], "field1": "value1"}},
         }
         secrets = load_secrets_v3.SecretsV3Base(module, syaml)
         result = secrets._validate_secrets()
         self.assertFalse(result[0])
-        self.assertIn("not supported with aws-secrets-manager backing store", result[1])
+        self.assertIn("not supported with aws-secrets-manager secretstore", result[1])
 
     def test_aws_secret_name_validation(self, getpass):
         """Test AWS secret name validation"""
@@ -812,7 +812,7 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         # Test valid secretName
         syaml = {
             "version": "3.0",
-            "backingStore": "aws-secrets-manager",
+            "secretstore": "aws-secrets-manager",
             "secrets": {
                 "test_secret": {"secretName": "custom/secret", "field1": "value1"}
             },
@@ -824,7 +824,7 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         # Test empty secretName
         syaml = {
             "version": "3.0",
-            "backingStore": "aws-secrets-manager",
+            "secretstore": "aws-secrets-manager",
             "secrets": {"test_secret": {"secretName": "", "field1": "value1"}},
         }
         secrets = load_secrets_v3.SecretsV3Base(module, syaml)
@@ -840,7 +840,7 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         # Test valid tags
         syaml = {
             "version": "3.0",
-            "backingStore": "aws-secrets-manager",
+            "secretstore": "aws-secrets-manager",
             "secrets": {
                 "test_secret": {
                     "tags": {"Environment": "production", "Team": "platform"},
@@ -855,7 +855,7 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         # Test invalid tags (non-dict)
         syaml = {
             "version": "3.0",
-            "backingStore": "aws-secrets-manager",
+            "secretstore": "aws-secrets-manager",
             "secrets": {"test_secret": {"tags": "invalid", "field1": "value1"}},
         }
         secrets = load_secrets_v3.SecretsV3Base(module, syaml)
@@ -871,7 +871,7 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         # Test valid rotation config
         syaml = {
             "version": "3.0",
-            "backingStore": "aws-secrets-manager",
+            "secretstore": "aws-secrets-manager",
             "secrets": {
                 "test_secret": {
                     "automaticRotation": {
@@ -889,7 +889,7 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         # Test missing enabled field
         syaml = {
             "version": "3.0",
-            "backingStore": "aws-secrets-manager",
+            "secretstore": "aws-secrets-manager",
             "secrets": {
                 "test_secret": {
                     "automaticRotation": {"rotationSchedule": "rate(30 days)"},
@@ -905,7 +905,7 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         # Test enabled but missing rotationSchedule
         syaml = {
             "version": "3.0",
-            "backingStore": "aws-secrets-manager",
+            "secretstore": "aws-secrets-manager",
             "secrets": {
                 "test_secret": {
                     "automaticRotation": {"enabled": True},
@@ -926,7 +926,7 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         # Test with prefix
         syaml = {
             "version": "3.0",
-            "backingStore": "aws-secrets-manager",
+            "secretstore": "aws-secrets-manager",
             "awsConfig": {"prefix": "myapp/prod/"},
             "secrets": {},
         }
@@ -945,7 +945,7 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         # Test without prefix
         syaml_no_prefix = {
             "version": "3.0",
-            "backingStore": "aws-secrets-manager",
+            "secretstore": "aws-secrets-manager",
             "secrets": {},
         }
         aws_secrets_no_prefix = load_secrets_v3.LoadSecretsV3AWS(
@@ -964,7 +964,7 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         module = mock.MagicMock()
         syaml = {
             "version": "3.0",
-            "backingStore": "aws-secrets-manager",
+            "secretstore": "aws-secrets-manager",
             "awsConfig": {
                 "defaultTags": {
                     "Environment": "production",
@@ -1002,7 +1002,7 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         module = mock.MagicMock()
         syaml = {
             "version": "3.0",
-            "backingStore": "aws-secrets-manager",
+            "secretstore": "aws-secrets-manager",
             "awsConfig": {"defaultKmsKeyId": "alias/default-key"},
             "secrets": {},
         }
@@ -1021,7 +1021,7 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         # Test no default KMS key
         syaml_no_default = {
             "version": "3.0",
-            "backingStore": "aws-secrets-manager",
+            "secretstore": "aws-secrets-manager",
             "secrets": {},
         }
         aws_secrets_no_default = load_secrets_v3.LoadSecretsV3AWS(
