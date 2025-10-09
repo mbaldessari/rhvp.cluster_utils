@@ -1,0 +1,17 @@
+version: "3.0"
+
+settings:
+  targets: ["hub"]
+  namespace: "validated-patterns-secrets"
+
+secrets:
+  api-config:
+    # Use short format for default section
+    api_key: "ini://test-ini-example.ini:api_key"
+    database_url: "ini://test-ini-example.ini:database_url"
+
+  production-config:
+    targets: ["prod-cluster"]
+    # Use full format for custom section
+    api_key: "ini://test-ini-example.ini:production:api_key"
+    database_url: "ini://test-ini-example.ini:production:database_url"

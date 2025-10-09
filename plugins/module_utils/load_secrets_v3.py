@@ -21,6 +21,7 @@ from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
 import base64
+import configparser
 import getpass
 import os
 import re
@@ -145,6 +146,8 @@ class SecretsV3Base:
             return "file_base64", instruction[14:]  # Remove file+base64:// prefix
         elif instruction.startswith("file://"):
             return "file", instruction[7:]  # Remove file:// prefix
+        elif instruction.startswith("ini://"):
+            return "ini", instruction[6:]  # Remove ini:// prefix
         elif instruction.startswith("generate:"):
             return "generate", instruction[9:]  # Remove generate: prefix
         elif instruction.startswith("prompt:"):
@@ -225,6 +228,19 @@ class SecretsV3Base:
                 if not os.path.isfile(expanded_path):
                     return (False, f"Secret '{secret_name}' field '{field_name}' file not found: {param}")
                 return (True, "")
+            case "ini":
+                if not param:
+                    return (False, f"Secret '{secret_name}' field '{field_name}' has empty ini specification")
+                # Parse and validate ini specification
+                try:
+                    file_path, section, key = self._parse_ini_spec(param)
+                    expanded_path = os.path.expanduser(file_path)
+                    if not os.path.isfile(expanded_path):
+                        return (False, f"Secret '{secret_name}' field '{field_name}' ini file not found: {file_path}")
+                    return (True, "")
+                except ValueError as e:
+                    return (False, f"Secret '{secret_name}' field '{field_name}' invalid ini specification: {e}")
+                return (True, "")
             case "generate":
                 if not param:
                     return (False, f"Secret '{secret_name}' field '{field_name}' has empty policy name")
@@ -267,6 +283,12 @@ class SecretsV3Base:
                     return base64.b64encode(content).decode('utf-8')
                 except Exception as e:
                     self.module.fail_json(f"Error reading file {param}: {str(e)}")
+            case "ini":
+                try:
+                    file_path, section, key = self._parse_ini_spec(param)
+                    return self._read_ini_value(file_path, section, key)
+                except Exception as e:
+                    self.module.fail_json(f"Error reading ini value {param}: {str(e)}")
             case "prompt":
                 prompt_text = f"{param}: "
                 return getpass.getpass(prompt_text)
@@ -281,6 +303,49 @@ class SecretsV3Base:
         binary_extensions = {'.crt', '.pem', '.key', '.p12', '.pfx', '.der', '.cer'}
         _, ext = os.path.splitext(filepath.lower())
         return ext in binary_extensions
+
+    def _parse_ini_spec(self, ini_spec):
+        """
+        Parse ini specification into file_path, section, and key
+
+        Formats supported:
+        - file_path:section:key
+        - file_path:key (defaults to 'default' section)
+        """
+        parts = ini_spec.split(':')
+        if len(parts) == 2:
+            # file_path:key format (default section)
+            file_path, key = parts
+            section = 'default'
+        elif len(parts) == 3:
+            # file_path:section:key format
+            file_path, section, key = parts
+        else:
+            raise ValueError(f"Invalid ini specification format: {ini_spec}. Expected 'file:key' or 'file:section:key'")
+
+        if not file_path:
+            raise ValueError("File path cannot be empty")
+        if not key:
+            raise ValueError("Key cannot be empty")
+        if not section:
+            raise ValueError("Section cannot be empty")
+
+        return file_path, section, key
+
+    def _read_ini_value(self, file_path, section, key):
+        """Read a value from an INI file"""
+        expanded_path = os.path.expanduser(file_path)
+
+        config = configparser.ConfigParser()
+        config.read(expanded_path)
+
+        if section not in config:
+            raise KeyError(f"Section '{section}' not found in {file_path}")
+
+        if key not in config[section]:
+            raise KeyError(f"Key '{key}' not found in section '{section}' of {file_path}")
+
+        return config[section][key]
 
     def sanitize_values(self):
         """Validate the V3 secrets structure"""

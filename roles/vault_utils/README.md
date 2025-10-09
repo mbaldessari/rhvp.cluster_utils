@@ -115,6 +115,11 @@ secrets:
     endpoint: "https://api.example.com"
     token: "generate:medium"
     config_file: "file+base64://path/to/config.json"
+
+  aws:
+    access_key: "ini://~/.aws/credentials:default:aws_access_key_id"
+    secret_key: "ini://~/.aws/credentials:default:aws_secret_access_key"
+    region: "ini://~/.aws/config:region"  # Uses default section
 ```
 
 #### Field Instructions
@@ -124,6 +129,8 @@ Version 3.0 uses instruction-based field definitions with the following formats:
 - **Static values**: Direct string, number, or boolean values
 - **`file://path`**: Load file content as plain text
 - **`file+base64://path`**: Load file content and base64 encode it (ideal for binary files)
+- **`ini://path:section:key`**: Load value from INI file (e.g., `ini://~/.aws/credentials:default:aws_access_key_id`)
+- **`ini://path:key`**: Load value from INI file using default section (e.g., `ini://~/.aws/config:region`)
 - **`generate:policy_name`**: Generate password using specified policy
 - **`prompt:message`**: Prompt user for input during execution
 

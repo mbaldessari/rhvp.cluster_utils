@@ -101,6 +101,11 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         self.assertEqual(field_type, "file")
         self.assertEqual(param, "path/to/file")
 
+        # Test ini:// parsing
+        field_type, param = secrets._parse_field_instruction("ini://~/.aws/credentials:default:aws_access_key_id")
+        self.assertEqual(field_type, "ini")
+        self.assertEqual(param, "~/.aws/credentials:default:aws_access_key_id")
+
         # Test static value
         field_type, param = secrets._parse_field_instruction("static_value")
         self.assertEqual(field_type, "static")
@@ -188,6 +193,172 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
             self.assertIsInstance(decoded_bytes, bytes)
         except Exception as e:
             self.fail(f"file+base64:// output is not valid base64: {e}")
+
+    def test_parse_ini_spec(self, getpass):
+        """Test INI specification parsing"""
+        # Create a mock module and secrets instance
+        module = mock.MagicMock()
+        syaml = {"version": "3.0", "secrets": {}}
+        secrets = load_secrets_v3.SecretsV3Base(module, syaml)
+
+        # Test full format: file:section:key
+        file_path, section, key = secrets._parse_ini_spec("~/.aws/credentials:default:aws_access_key_id")
+        self.assertEqual(file_path, "~/.aws/credentials")
+        self.assertEqual(section, "default")
+        self.assertEqual(key, "aws_access_key_id")
+
+        # Test short format: file:key (defaults to 'default' section)
+        file_path, section, key = secrets._parse_ini_spec("~/.aws/config:region")
+        self.assertEqual(file_path, "~/.aws/config")
+        self.assertEqual(section, "default")
+        self.assertEqual(key, "region")
+
+        # Test custom section
+        file_path, section, key = secrets._parse_ini_spec("/etc/config.ini:database:password")
+        self.assertEqual(file_path, "/etc/config.ini")
+        self.assertEqual(section, "database")
+        self.assertEqual(key, "password")
+
+    def test_parse_ini_spec_errors(self, getpass):
+        """Test INI specification parsing error cases"""
+        # Create a mock module and secrets instance
+        module = mock.MagicMock()
+        syaml = {"version": "3.0", "secrets": {}}
+        secrets = load_secrets_v3.SecretsV3Base(module, syaml)
+
+        # Test invalid format (too few parts)
+        with self.assertRaises(ValueError) as cm:
+            secrets._parse_ini_spec("onlyfile")
+        self.assertIn("Invalid ini specification format", str(cm.exception))
+
+        # Test invalid format (too many parts)
+        with self.assertRaises(ValueError) as cm:
+            secrets._parse_ini_spec("file:section:key:extra")
+        self.assertIn("Invalid ini specification format", str(cm.exception))
+
+        # Test empty file path
+        with self.assertRaises(ValueError) as cm:
+            secrets._parse_ini_spec(":section:key")
+        self.assertIn("File path cannot be empty", str(cm.exception))
+
+        # Test empty key
+        with self.assertRaises(ValueError) as cm:
+            secrets._parse_ini_spec("file:section:")
+        self.assertIn("Key cannot be empty", str(cm.exception))
+
+    def test_read_ini_value(self, getpass):
+        """Test reading values from INI files"""
+        # Create a test ini file
+        import tempfile
+        import os
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.ini', delete=False) as f:
+            f.write("[default]\n")
+            f.write("api_key=test_api_key\n")
+            f.write("region=us-east-1\n")
+            f.write("\n")
+            f.write("[custom]\n")
+            f.write("database_url=postgresql://localhost/test\n")
+            ini_file_path = f.name
+
+        try:
+            # Create a mock module and secrets instance
+            module = mock.MagicMock()
+            syaml = {"version": "3.0", "secrets": {}}
+            secrets = load_secrets_v3.SecretsV3Base(module, syaml)
+
+            # Test reading from default section
+            value = secrets._read_ini_value(ini_file_path, "default", "api_key")
+            self.assertEqual(value, "test_api_key")
+
+            value = secrets._read_ini_value(ini_file_path, "default", "region")
+            self.assertEqual(value, "us-east-1")
+
+            # Test reading from custom section
+            value = secrets._read_ini_value(ini_file_path, "custom", "database_url")
+            self.assertEqual(value, "postgresql://localhost/test")
+
+        finally:
+            # Clean up
+            os.unlink(ini_file_path)
+
+    def test_get_field_value_ini(self, getpass):
+        """Test getting field value for ini:// instructions"""
+        # Create a test ini file
+        import tempfile
+        import os
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.ini', delete=False) as f:
+            f.write("[default]\n")
+            f.write("access_key=AKIAIOSFODNN7EXAMPLE\n")
+            f.write("secret_key=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY\n")
+            f.write("\n")
+            f.write("[production]\n")
+            f.write("database_url=postgresql://prod-server/mydb\n")
+            ini_file_path = f.name
+
+        try:
+            # Create a mock module and secrets instance
+            module = mock.MagicMock()
+            syaml = {"version": "3.0", "secrets": {}}
+            secrets = load_secrets_v3.SecretsV3Base(module, syaml)
+
+            # Test full format instruction
+            instruction = f"ini://{ini_file_path}:default:access_key"
+            result = secrets._get_field_value("test_secret", "test_field", instruction)
+            self.assertEqual(result, "AKIAIOSFODNN7EXAMPLE")
+
+            # Test short format instruction
+            instruction = f"ini://{ini_file_path}:secret_key"
+            result = secrets._get_field_value("test_secret", "test_field", instruction)
+            self.assertEqual(result, "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY")
+
+            # Test custom section
+            instruction = f"ini://{ini_file_path}:production:database_url"
+            result = secrets._get_field_value("test_secret", "test_field", instruction)
+            self.assertEqual(result, "postgresql://prod-server/mydb")
+
+        finally:
+            # Clean up
+            os.unlink(ini_file_path)
+
+    def test_validate_field_ini(self, getpass):
+        """Test validation of ini:// field instructions"""
+        # Create a test ini file
+        import tempfile
+        import os
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.ini', delete=False) as f:
+            f.write("[default]\ntest_key=test_value\n")
+            ini_file_path = f.name
+
+        try:
+            # Create a mock module and secrets instance
+            module = mock.MagicMock()
+            syaml = {"version": "3.0", "secrets": {}}
+            secrets = load_secrets_v3.SecretsV3Base(module, syaml)
+
+            # Test valid ini:// instruction
+            instruction = f"ini://{ini_file_path}:default:test_key"
+            result = secrets._validate_field("test_secret", "test_field", instruction)
+            self.assertTrue(result[0])
+            self.assertEqual(result[1], "")
+
+            # Test invalid ini:// instruction (non-existent file)
+            instruction = "ini:///nonexistent/file.ini:default:key"
+            result = secrets._validate_field("test_secret", "test_field", instruction)
+            self.assertFalse(result[0])
+            self.assertIn("ini file not found", result[1])
+
+            # Test invalid ini:// instruction (bad format)
+            instruction = "ini://invalid_format"
+            result = secrets._validate_field("test_secret", "test_field", instruction)
+            self.assertFalse(result[0])
+            self.assertIn("invalid ini specification", result[1])
+
+        finally:
+            # Clean up
+            os.unlink(ini_file_path)
 
 
 if __name__ == "__main__":
