@@ -86,7 +86,6 @@ backingStore: "vault"
 # Global settings (optional)
 settings:
   targets: ["hub", "spoke1"]  # Default targets for all secrets
-  namespace: "validated-patterns-secrets"  # Kubernetes namespace
 
 # Password generation policies (optional)
 policies:
