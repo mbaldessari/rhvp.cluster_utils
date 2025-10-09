@@ -21,6 +21,7 @@ import base64
 import json
 import os
 import unittest
+import yaml
 from unittest import mock
 from unittest.mock import patch
 
@@ -1176,6 +1177,117 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         instruction = {"value": True, "optional": True}
         value = secrets._get_field_value("test_secret", "test_field", instruction)
         self.assertTrue(value)
+
+    def test_policies_only_valid_with_vault_secretstore(self, getpass):
+        """Test that 'policies' field is only valid when secretstore is 'vault'"""
+        # Create a mock module
+        module = mock.MagicMock()
+
+        # Test policies with vault secretstore - should pass
+        syaml = {
+            "version": "3.0",
+            "secretstore": "vault",
+            "policies": {
+                "custom": {
+                    "length": 16,
+                    "charset": "alphanumeric"
+                }
+            },
+            "secrets": {"test_secret": {"field1": "value1"}},
+        }
+        secrets = load_secrets_v3.SecretsV3Base(module, syaml)
+        result = secrets._validate_secrets()
+        self.assertTrue(result[0])
+        self.assertEqual(result[1], "")
+
+        # Test policies with kubernetes secretstore - should fail
+        syaml = {
+            "version": "3.0",
+            "secretstore": "kubernetes",
+            "policies": {
+                "custom": {
+                    "length": 16,
+                    "charset": "alphanumeric"
+                }
+            },
+            "secrets": {"test_secret": {"field1": "value1"}},
+        }
+        secrets = load_secrets_v3.SecretsV3Base(module, syaml)
+        result = secrets._validate_secrets()
+        self.assertFalse(result[0])
+        self.assertIn(
+            "The 'policies' field is only valid when secretstore is 'vault'", result[1]
+        )
+        self.assertIn("but secretstore is 'kubernetes'", result[1])
+
+        # Test policies with aws-secrets-manager secretstore - should fail
+        syaml = {
+            "version": "3.0",
+            "secretstore": "aws-secrets-manager",
+            "policies": {
+                "custom": {
+                    "length": 16,
+                    "charset": "alphanumeric"
+                }
+            },
+            "secrets": {"test_secret": {"field1": "value1"}},
+        }
+        secrets = load_secrets_v3.SecretsV3Base(module, syaml)
+        result = secrets._validate_secrets()
+        self.assertFalse(result[0])
+        self.assertIn(
+            "The 'policies' field is only valid when secretstore is 'vault'", result[1]
+        )
+        self.assertIn("but secretstore is 'aws-secrets-manager'", result[1])
+
+        # Test no policies with non-vault secretstore - should pass
+        syaml = {
+            "version": "3.0",
+            "secretstore": "kubernetes",
+            "secrets": {"test_secret": {"field1": "value1"}},
+        }
+        secrets = load_secrets_v3.SecretsV3Base(module, syaml)
+        result = secrets._validate_secrets()
+        self.assertTrue(result[0])
+        self.assertEqual(result[1], "")
+
+        # Test no policies with vault secretstore - should pass
+        syaml = {
+            "version": "3.0",
+            "secretstore": "vault",
+            "secrets": {"test_secret": {"field1": "value1"}},
+        }
+        secrets = load_secrets_v3.SecretsV3Base(module, syaml)
+        result = secrets._validate_secrets()
+        self.assertTrue(result[0])
+        self.assertEqual(result[1], "")
+
+    def test_policies_validation_with_sample_files(self, getpass):
+        """Test policies validation using sample YAML files"""
+        # Create a mock module
+        module = mock.MagicMock()
+
+        # Test that kubernetes with policies fails
+        kubernetes_invalid_file = os.path.join(self.testdir_v3, "values-secret-v3-invalid-policies-kubernetes.yaml")
+        with open(kubernetes_invalid_file, "r", encoding="utf-8") as file:
+            syaml = yaml.safe_load(file.read())
+
+        secrets = load_secrets_v3.SecretsV3Base(module, syaml)
+        result = secrets._validate_secrets()
+        self.assertFalse(result[0])
+        self.assertIn("The 'policies' field is only valid when secretstore is 'vault'", result[1])
+        self.assertIn("but secretstore is 'kubernetes'", result[1])
+
+        # Test that aws with policies fails
+        aws_invalid_file = os.path.join(self.testdir_v3, "values-secret-v3-invalid-policies-aws.yaml")
+        with open(aws_invalid_file, "r", encoding="utf-8") as file:
+            syaml = yaml.safe_load(file.read())
+
+        secrets = load_secrets_v3.SecretsV3Base(module, syaml)
+        result = secrets._validate_secrets()
+        self.assertFalse(result[0])
+        self.assertIn("The 'policies' field is only valid when secretstore is 'vault'", result[1])
+        self.assertIn("but secretstore is 'aws-secrets-manager'", result[1])
 
     def test_optional_field_successful_file_read(self, getpass):
         """Test that optional fields work normally when they succeed"""

@@ -188,6 +188,13 @@ class SecretsV3Base:
                 f"Unsupported secretstore: {backing_store}. Supported values: vault, kubernetes, aws-secrets-manager",
             )
 
+        # Validate that policies are only used with vault secretstore
+        if "policies" in self.syaml and backing_store != "vault":
+            return (
+                False,
+                f"The 'policies' field is only valid when secretstore is 'vault', but secretstore is '{backing_store}'",
+            )
+
         secrets = self._get_secrets()
         if len(secrets) == 0:
             self.module.fail_json("No secrets found")
