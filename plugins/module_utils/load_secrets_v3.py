@@ -141,7 +141,9 @@ class SecretsV3Base:
             return "static", instruction
 
         # Check for instruction patterns
-        if instruction.startswith("file://"):
+        if instruction.startswith("file+base64://"):
+            return "file_base64", instruction[14:]  # Remove file+base64:// prefix
+        elif instruction.startswith("file://"):
             return "file", instruction[7:]  # Remove file:// prefix
         elif instruction.startswith("generate:"):
             return "generate", instruction[9:]  # Remove generate: prefix
@@ -215,6 +217,14 @@ class SecretsV3Base:
                 if not os.path.isfile(expanded_path):
                     return (False, f"Secret '{secret_name}' field '{field_name}' file not found: {param}")
                 return (True, "")
+            case "file_base64":
+                if not param:
+                    return (False, f"Secret '{secret_name}' field '{field_name}' has empty file path")
+                # Check if file exists
+                expanded_path = os.path.expanduser(param)
+                if not os.path.isfile(expanded_path):
+                    return (False, f"Secret '{secret_name}' field '{field_name}' file not found: {param}")
+                return (True, "")
             case "generate":
                 if not param:
                     return (False, f"Secret '{secret_name}' field '{field_name}' has empty policy name")
@@ -246,6 +256,15 @@ class SecretsV3Base:
                     if self._is_binary_file(expanded_path):
                         return base64.b64encode(content.encode()).decode('utf-8')
                     return content
+                except Exception as e:
+                    self.module.fail_json(f"Error reading file {param}: {str(e)}")
+            case "file_base64":
+                expanded_path = os.path.expanduser(param)
+                try:
+                    with open(expanded_path, 'rb') as f:
+                        content = f.read()
+                    # Always base64 encode the file content
+                    return base64.b64encode(content).decode('utf-8')
                 except Exception as e:
                     self.module.fail_json(f"Error reading file {param}: {str(e)}")
             case "prompt":

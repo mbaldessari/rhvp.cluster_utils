@@ -56,10 +56,11 @@ This role configures four secret paths in vault:
 
 ## Values secret file format
 
-Currently this role supports two formats: version 1.0 (which is the assumed
-default when not specified) and version 2.0. The latter is more fatureful and
-supports generating secrets directly into the vault and also prompting the user
-for a secret.
+Currently this role supports three formats: version 1.0 (which is the assumed
+default when not specified), version 2.0, and version 3.0. Version 2.0 is more
+featureful and supports generating secrets directly into the vault and also prompting
+the user for a secret. Version 3.0 provides a simplified syntax with instruction-based
+field definitions and improved policy management.
 
 By default, the first file that will looked up is
 `~/.config/hybrid-cloud-patterns/values-secret-<patternname>.yaml`, then
@@ -71,6 +72,67 @@ secret file.
 
 The values secret YAML files can be encrypted with `ansible-vault`. If the role detects they are encrypted, the password to
 decrypt them will be prompted when needed.
+
+### Version 3.0
+
+Version 3.0 introduces a simplified syntax with instruction-based field definitions. Here's an example of a version 3.0 file:
+
+```yaml
+version: "3.0"
+
+# Global settings (optional)
+settings:
+  targets: ["hub", "spoke1"]  # Default targets for all secrets
+  namespace: "validated-patterns-secrets"  # Kubernetes namespace
+
+# Password generation policies (optional)
+policies:
+  basic:
+    length: 16
+    charset: "alphanumeric"  # Options: alphanumeric, alphanumeric_symbols, all
+  medium:
+    length: 20
+    charset: "alphanumeric_symbols"
+  strong:
+    length: 32
+    charset: "all"
+  # You can also use raw vault policy format:
+  custom: |
+    length=10
+    rule "charset" { charset = "abcdefghijklmnopqrstuvwxyz" min-chars = 1 }
+
+# Secrets configuration
+secrets:
+  database:
+    username: "dbuser"  # Static value
+    password: "generate:strong"  # Generate using 'strong' policy
+    ca_cert: "file://path/to/ca.crt"  # Load file content as-is
+    binary_cert: "file+base64://path/to/cert.p12"  # Load file and base64 encode
+    admin_password: "prompt:Enter admin password"  # Prompt user for input
+
+  api-config:
+    targets: ["spoke1"]  # Override global targets for this secret
+    endpoint: "https://api.example.com"
+    token: "generate:medium"
+    config_file: "file+base64://path/to/config.json"
+```
+
+#### Field Instructions
+
+Version 3.0 uses instruction-based field definitions with the following formats:
+
+- **Static values**: Direct string, number, or boolean values
+- **`file://path`**: Load file content as plain text
+- **`file+base64://path`**: Load file content and base64 encode it (ideal for binary files)
+- **`generate:policy_name`**: Generate password using specified policy
+- **`prompt:message`**: Prompt user for input during execution
+
+#### Policy Definitions
+
+Policies support simplified configuration with three charset options:
+- `alphanumeric`: Letters and numbers only
+- `alphanumeric_symbols`: Letters, numbers, and basic symbols (!@#%^&*)
+- `all`: Letters, numbers, and extended symbols
 
 ### Version 2.0
 
