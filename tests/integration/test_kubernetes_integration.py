@@ -30,6 +30,7 @@ class KubernetesIntegrationTest(unittest.TestCase):
             [str(cls.test_dir / "kind-helper.sh"), "start"],
             capture_output=True,
             text=True,
+            check=False,
         )
 
         if result.returncode != 0:
@@ -46,6 +47,7 @@ class KubernetesIntegrationTest(unittest.TestCase):
             [str(cls.test_dir / "kind-helper.sh"), "stop"],
             capture_output=True,
             text=True,
+            check=False,
         )
         print("Kind cluster stopped")
 
@@ -67,6 +69,7 @@ class KubernetesIntegrationTest(unittest.TestCase):
                     capture_output=True,
                     text=True,
                     timeout=10,
+                    check=False,
                 )
 
                 if result.returncode == 0 and "Ready" in result.stdout:
@@ -80,7 +83,7 @@ class KubernetesIntegrationTest(unittest.TestCase):
     def _kubectl_command(self, *args):
         """Run kubectl command with the test kubeconfig"""
         cmd = ["kubectl", "--kubeconfig", str(self.kubeconfig_file)] + list(args)
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(cmd, capture_output=True, text=True, check=False)
         return result
 
     def _get_secret(self, name, namespace="default"):
@@ -186,6 +189,7 @@ secrets:
                 cwd=self.collection_root,
                 capture_output=True,
                 text=True,
+                check=False,
                 env=env,
             )
 

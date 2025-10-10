@@ -30,6 +30,7 @@ class VaultErrorIntegrationTest(unittest.TestCase):
             [str(cls.test_dir / "vault-helper.sh"), "start"],
             capture_output=True,
             text=True,
+            check=False,
         )
 
         if result.returncode != 0:
@@ -45,6 +46,7 @@ class VaultErrorIntegrationTest(unittest.TestCase):
             [str(cls.test_dir / "vault-helper.sh"), "stop"],
             capture_output=True,
             text=True,
+            check=False,
         )
         print("Vault stopped")
 
@@ -135,6 +137,7 @@ secrets:
                 cwd=self.collection_root,
                 capture_output=True,
                 text=True,
+                check=False,
                 env=env,
             )
 

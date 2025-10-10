@@ -43,12 +43,22 @@ class VaultDirectIntegrationTest(unittest.TestCase):
         print("Starting Vault container...")
 
         # Clean up any existing container with the same name
-        subprocess.run(["podman", "stop", "vault-test"], capture_output=True, text=True)
-        subprocess.run(["podman", "rm", "vault-test"], capture_output=True, text=True)
+        subprocess.run(
+            ["podman", "stop", "vault-test"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        subprocess.run(
+            ["podman", "rm", "vault-test"], capture_output=True, text=True, check=False
+        )
 
         # Create a volume for vault data (if it doesn't exist)
         subprocess.run(
-            ["podman", "volume", "create", "vault-data"], capture_output=True, text=True
+            ["podman", "volume", "create", "vault-data"],
+            capture_output=True,
+            text=True,
+            check=False,
         )
         # Ignore errors if volume already exists
 
@@ -84,6 +94,7 @@ class VaultDirectIntegrationTest(unittest.TestCase):
             ],
             capture_output=True,
             text=True,
+            check=False,
         )
 
         if result.returncode != 0:
@@ -98,11 +109,19 @@ class VaultDirectIntegrationTest(unittest.TestCase):
         print("Stopping Vault container...")
 
         # Stop and remove the container (--rm flag will auto-remove it)
-        subprocess.run(["podman", "stop", "vault-test"], capture_output=True, text=True)
+        subprocess.run(
+            ["podman", "stop", "vault-test"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
 
         # Clean up the volume
         subprocess.run(
-            ["podman", "volume", "rm", "vault-data"], capture_output=True, text=True
+            ["podman", "volume", "rm", "vault-data"],
+            capture_output=True,
+            text=True,
+            check=False,
         )
 
     @classmethod
@@ -164,7 +183,10 @@ class VaultDirectIntegrationTest(unittest.TestCase):
                             f"VAULT_ADDR=http://localhost:8200 VAULT_TOKEN={self.vault_token} {vault_cmd}",
                         ]
                         result = subprocess.run(
-                            podman_cmd, capture_output=True, text=True
+                            podman_cmd,
+                            capture_output=True,
+                            text=True,
+                            check=False,
                         )
                         return (result.returncode, result.stdout, result.stderr)
 

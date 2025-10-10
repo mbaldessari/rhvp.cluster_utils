@@ -1,10 +1,4 @@
 plugins/modules/parse_secrets_info.py validate-modules:missing-gplv3-license
 plugins/modules/vault_load_secrets.py validate-modules:missing-gplv3-license
 plugins/modules/vault_load_parsed_secrets.py validate-modules:missing-gplv3-license
-tests/integration/kind-helper.sh shebang
-tests/integration/test_kubernetes_integration.py shebang
-tests/integration/test_vault_direct.py shebang
-tests/integration/test_vault_error_integration.py shebang
-tests/integration/test_vault_integration.py shebang
-tests/integration/test_vault_simple.py shebang
 tests/integration/vault-helper.sh shebang

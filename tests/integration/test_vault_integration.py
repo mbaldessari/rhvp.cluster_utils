@@ -29,12 +29,22 @@ class VaultIntegrationTest(unittest.TestCase):
         print("Starting Vault container...")
 
         # Clean up any existing container with the same name
-        subprocess.run(["podman", "stop", "vault-test"], capture_output=True, text=True)
-        subprocess.run(["podman", "rm", "vault-test"], capture_output=True, text=True)
+        subprocess.run(
+            ["podman", "stop", "vault-test"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        subprocess.run(
+            ["podman", "rm", "vault-test"], capture_output=True, text=True, check=False
+        )
 
         # Create a volume for vault data (if it doesn't exist)
         subprocess.run(
-            ["podman", "volume", "create", "vault-data"], capture_output=True, text=True
+            ["podman", "volume", "create", "vault-data"],
+            capture_output=True,
+            text=True,
+            check=False,
         )
         # Ignore errors if volume already exists
 
@@ -69,6 +79,7 @@ class VaultIntegrationTest(unittest.TestCase):
                 "-dev-listen-address=0.0.0.0:8200",
             ],
             capture_output=True,
+            check=False,
             text=True,
         )
 
@@ -87,11 +98,19 @@ class VaultIntegrationTest(unittest.TestCase):
         print("Stopping Vault container...")
 
         # Stop and remove the container (--rm flag will auto-remove it)
-        subprocess.run(["podman", "stop", "vault-test"], capture_output=True, text=True)
+        subprocess.run(
+            ["podman", "stop", "vault-test"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
 
         # Clean up the volume
         subprocess.run(
-            ["podman", "volume", "rm", "vault-data"], capture_output=True, text=True
+            ["podman", "volume", "rm", "vault-data"],
+            capture_output=True,
+            text=True,
+            check=False,
         )
 
     @classmethod
@@ -192,6 +211,7 @@ class VaultIntegrationTest(unittest.TestCase):
                 cwd=self.collection_root,
                 capture_output=True,
                 text=True,
+                check=False,
                 env={
                     **os.environ,
                     "ANSIBLE_COLLECTIONS_PATH": str(self.collection_root.parent.parent),
