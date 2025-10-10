@@ -2,4 +2,4 @@ plugins/modules/parse_secrets_info.py validate-modules:missing-gplv3-license
 plugins/modules/vault_load_secrets.py validate-modules:missing-gplv3-license
 plugins/modules/vault_load_parsed_secrets.py validate-modules:missing-gplv3-license
 tests/integration/vault-helper.sh shebang
-tests/unit/v3/values-secret-v3-duplicate-secrets.yaml yamllint
+tests/unit/v3/values-secret-v3-duplicate-secrets.yaml yamllint:key-duplicates
