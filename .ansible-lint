@@ -7,6 +7,8 @@ skip_list:
   - yaml[line-length] # too long lines
   - yaml[indentation] # Forcing lists to be always indented by 2 chars is silly IMO
   - var-naming[no-role-prefix] # This would be too much churn for very little gain
+  - yaml[key-duplicates]
+  - yaml[new-line-at-end-of-file]
   - no-changed-when
   - var-naming[no-role-prefix] # There are too many changes now and it would be too risky
   - galaxy[no-changelog] # We currently don't have a changelog.yaml file
