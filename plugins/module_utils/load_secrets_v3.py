@@ -523,12 +523,16 @@ class SecretsV3Base:
                 field_type, param, secret_name, field_name
             )
         except Exception as e:
+            error_msg = f"Secret '{secret_name}' field '{field_name}': {str(e)}"
+            self.errors.append(error_msg)
+
             if is_optional:
-                # For optional fields, return None instead of failing
+                # For optional fields, return None and continue
                 return None
             else:
-                # For required fields, fail with original behavior
-                self.module.fail_json(str(e))
+                # For required fields, also return None but log the error
+                # This allows processing to continue
+                return None
 
     def _get_field_value_internal(self, field_type, param, secret_name, field_name):
         """Internal method to get field value (can raise exceptions)"""
@@ -646,11 +650,13 @@ class LoadSecretsV3(SecretsV3Base):
         self.pod = pod
         # Check for direct vault mode (for integration testing)
         self.direct_mode = os.environ.get('VAULT_DIRECT_MODE', '').lower() == 'true'
+        # Collect errors instead of failing immediately
+        self.errors = []
 
     def _run_command(self, command, attempts=1, sleep=3, checkrc=True):
         """
         Runs a command on the host ansible is running on. A failing command
-        will raise an exception in this function directly (due to check=True)
+        will be logged as an error but processing will continue
 
         Parameters:
             command(str): The command to be run.
@@ -663,13 +669,16 @@ class LoadSecretsV3(SecretsV3Base):
         for attempt in range(attempts):
             ret = self.module.run_command(
                 command,
-                check_rc=checkrc,
+                check_rc=False,  # Don't fail on error, let us handle it
                 use_unsafe_shell=True,
                 environ_update=os.environ.copy(),
             )
             if ret[0] == 0:
                 return ret
             if attempt >= attempts - 1:
+                # Log the error but don't fail
+                error_msg = f"Command failed after {attempts} attempts: {command}\nError: {ret[2]}"
+                self.errors.append(error_msg)
                 return ret
             time.sleep(sleep)
 
@@ -750,7 +759,10 @@ class LoadSecretsV3(SecretsV3Base):
                     f"oc exec -n {self.namespace} {self.pod} -i -- sh -c "
                     f'"{gen_cmd} | vault kv {verb} -mount={mount} {target}/{secret_name} {field_name}=-"'
                 )
-            self._run_command(cmd, attempts=3)
+            ret = self._run_command(cmd, attempts=3)
+            if ret[0] != 0:
+                error_msg = f"Failed to inject generated field '{field_name}' for secret '{secret_name}' in target '{target}'"
+                self.errors.append(error_msg)
 
     def _inject_static_field(
         self, secret_name, field_name, value, mount, targets, verb
@@ -768,7 +780,10 @@ class LoadSecretsV3(SecretsV3Base):
                     f"oc exec -n {self.namespace} {self.pod} -i -- sh -c "
                     f"\"vault kv {verb} -mount={mount} {target}/{secret_name} {field_name}='{value}'\""
                 )
-            self._run_command(cmd, attempts=3)
+            ret = self._run_command(cmd, attempts=3)
+            if ret[0] != 0:
+                error_msg = f"Failed to inject static field '{field_name}' for secret '{secret_name}' in target '{target}'"
+                self.errors.append(error_msg)
 
     def inject_secrets(self):
         """Inject all secrets into vault"""
@@ -783,6 +798,15 @@ class LoadSecretsV3(SecretsV3Base):
             # Count fields, not secrets
             field_count = len([k for k in secret_config.keys() if k != "targets"])
             total_secrets += field_count
+
+        # Report any errors that occurred during processing
+        if self.errors:
+            error_summary = f"Encountered {len(self.errors)} errors while processing secrets:\n"
+            for i, error in enumerate(self.errors, 1):
+                error_summary += f"{i}. {error}\n"
+
+            # Fail the module with all collected errors
+            self.module.fail_json(msg=error_summary.strip())
 
         return total_secrets
 

@@ -58,6 +58,7 @@ integration-test: integration-test-setup ## Run integration tests with real Vaul
 integration-test-full: integration-test-setup ## Run full integration tests including Ansible playbook tests
 	@echo "Running full integration tests..."
 	cd tests/integration && python test_vault_simple.py
+	cd tests/integration && python test_vault_error_integration.py
 	cd tests/integration && ANSIBLE_COLLECTIONS_PATH=$(shell pwd)/../.. python test_vault_integration.py
 
 .PHONY: test-all
