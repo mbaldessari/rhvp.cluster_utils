@@ -36,4 +36,3 @@ jobs:
         run: |
           cd ansible_collections/rhvp/cluster_utils
           make test-converter
-
