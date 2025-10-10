@@ -68,4 +68,5 @@ check-jsonschema: ## Runs check-jsonschema against all unit test files except kn
 
 .PHONY: clean
 clean: ## Clean temporary files
+	rm -rf tests/output
 	find tests -iname '*.xml' -exec rm "{}" \;
