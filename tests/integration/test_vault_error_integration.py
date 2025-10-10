@@ -7,6 +7,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -24,31 +25,108 @@ class VaultErrorIntegrationTest(unittest.TestCase):
         cls.test_dir = Path(__file__).parent
         cls.collection_root = cls.test_dir.parent.parent
 
-        # Start Vault container using helper script
+        # Start Vault container using direct podman command
         print("Starting Vault container...")
-        result = subprocess.run(
-            [str(cls.test_dir / "vault-helper.sh"), "start"],
+
+        # Clean up any existing container with the same name
+        subprocess.run(
+            ["podman", "stop", "vault-test"],
             capture_output=True,
             text=True,
             check=False,
         )
+        subprocess.run(
+            ["podman", "rm", "vault-test"], capture_output=True, text=True, check=False
+        )
+
+        # Create a volume for vault data (if it doesn't exist)
+        subprocess.run(
+            ["podman", "volume", "create", "vault-data"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        # Ignore errors if volume already exists
+
+        # Start the vault container
+        result = subprocess.run(
+            [
+                "podman",
+                "run",
+                "-d",
+                "--name",
+                "vault-test",
+                "--rm",  # Auto-remove when stopped
+                "-p",
+                "8200:8200",
+                "-e",
+                "VAULT_DEV_ROOT_TOKEN_ID=myroot",
+                "-e",
+                "VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200",
+                "-e",
+                "VAULT_ADDR=http://0.0.0.0:8200",
+                "--cap-add",
+                "IPC_LOCK",
+                "-v",
+                "vault-data:/vault/data",
+                "-v",
+                f"{cls.test_dir}/vault-config:/vault/config",
+                "docker.io/hashicorp/vault:1.15.2",
+                "vault",
+                "server",
+                "-dev",
+                "-dev-root-token-id=myroot",
+                "-dev-listen-address=0.0.0.0:8200",
+            ],
+            capture_output=True,
+            check=False,
+            text=True,
+        )
 
         if result.returncode != 0:
-            raise Exception(f"Failed to start Vault: {result.stderr}")
+            raise Exception(f"Failed to start Vault container: {result.stderr}")
 
+        # Wait for Vault to be ready
+        cls._wait_for_vault()
         print("Vault started successfully")
 
     @classmethod
     def tearDownClass(cls):
         """Clean up Vault container"""
         print("Stopping Vault container...")
-        result = subprocess.run(
-            [str(cls.test_dir / "vault-helper.sh"), "stop"],
+
+        # Stop and remove the container (--rm flag will auto-remove it)
+        subprocess.run(
+            ["podman", "stop", "vault-test"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        # Clean up the volume
+        subprocess.run(
+            ["podman", "volume", "rm", "vault-data"],
             capture_output=True,
             text=True,
             check=False,
         )
         print("Vault stopped")
+
+    @classmethod
+    def _wait_for_vault(cls, timeout=30):
+        """Wait for Vault to be ready"""
+        print("Waiting for Vault to be ready...")
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            try:
+                response = requests.get(f"{cls.vault_addr}/v1/sys/health", timeout=5)
+                if response.status_code in [200, 429, 472, 473]:
+                    print("Vault is ready!")
+                    return
+            except requests.RequestException:
+                pass
+            time.sleep(2)
+        raise Exception("Vault did not become ready within timeout")
 
     def _vault_request(self, method, path, data=None):
         """Make a request to Vault API"""

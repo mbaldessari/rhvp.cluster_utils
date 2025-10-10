@@ -20,19 +20,6 @@ make test-all
 
 ## Manual Testing
 
-### Start/Stop Vault Container
-
-```bash
-# Start Vault container
-./tests/integration/vault-helper.sh start
-
-# Check status
-./tests/integration/vault-helper.sh status
-
-# Stop Vault container
-./tests/integration/vault-helper.sh stop
-```
-
 ### Run Individual Tests
 
 ```bash
@@ -56,10 +43,12 @@ python test_vault_integration.py
 - `test_vault_direct.py` - Direct Python module integration test
 - `test_vault_integration.py` - Full Ansible playbook integration test
 - `test_vault_simple.py` - Basic Vault functionality test
-- `vault-helper.sh` - Helper script for container management
+- `test_vault_error_integration.py` - Error handling integration test
 - `requirements.txt` - Python dependencies
 
 ### Test Configuration
+
+**Container Management**: The tests automatically manage their own Vault containers using direct `podman` commands. Each test starts and stops its own container, so no manual container management is required.
 
 The tests use a Vault container configured with:
 - **Address**: `http://localhost:8200`
@@ -126,8 +115,8 @@ podman info
 # Check if containers are running
 podman ps
 
-# View Vault logs
-./tests/integration/vault-helper.sh logs
+# View Vault logs from running container
+podman logs vault-test
 ```
 
 ### Connection Issues
@@ -136,8 +125,8 @@ podman ps
 # Test Vault connection
 curl http://localhost:8200/v1/sys/health
 
-# Check Vault status via helper
-./tests/integration/vault-helper.sh status
+# Check Vault container status
+podman ps -f name=vault-test
 ```
 
 ### Port Conflicts
