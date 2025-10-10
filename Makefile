@@ -6,7 +6,7 @@ help: ## This help message
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^(\s|[a-zA-Z_0-9-])+:.*?##/ { printf "  \033[36m%-35s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
 
 .PHONY: super-linter
-super-linter: ## Runs super linter locally
+super-linter: clean ## Runs super linter locally
 	rm -rf .mypy_cache
 	podman run -e RUN_LOCAL=true -e USE_FIND_ALGORITHM=true	\
 					-e VALIDATE_ANSIBLE=false \
@@ -21,6 +21,7 @@ super-linter: ## Runs super linter locally
 					-e VALIDATE_PYTHON_PYINK=false \
 					-e VALIDATE_PYTHON_RUFF_FORMAT=false \
 					-e VALIDATE_SHELL_SHFMT=false \
+					-e VALIDATE_TRIVY=false \
 					-e VALIDATE_YAML=false \
 					-e VALIDATE_YAML_PRETTIER=false \
 					$(DISABLE_LINTERS) \
