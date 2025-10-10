@@ -44,7 +44,7 @@ ansible-unittest: ## run ansible unit tests
 	ansible-test units --venv --python 3.11 --python 3.12
 
 .PHONY: test
-test: ansible-sanitytest ansible-unittest integration-test-all test-converted ## Run all tests (sanity + unit + integration and converter)
+test: ansible-sanitytest ansible-unittest integration-test-all test-converter ## Run all tests (sanity + unit + integration and converter)
 
 .PHONY: integration-test-kubernetes
 integration-test-kubernetes: ## Run Kubernetes secretstore integration tests with kind

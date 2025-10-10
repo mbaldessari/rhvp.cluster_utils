@@ -21,8 +21,11 @@ A migration utility to convert values-secret files from version 2.0 to version 3
 # Convert a v2 secrets file to v3 format
 python scripts/convert_v2_to_v3.py old-values-v2.yaml new-values-v3.yaml
 
-# Auto-generate output filename
+# Convert and output to stdout (for piping)
 python scripts/convert_v2_to_v3.py old-values-v2.yaml
+
+# Pipe to other tools
+python scripts/convert_v2_to_v3.py old-values-v2.yaml | kubectl apply -f -
 ```
 
 Key features:

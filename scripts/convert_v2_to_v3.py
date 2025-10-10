@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """
 Converter utility to migrate values-secret files from version 2.0 to version 3.0 format.
 
@@ -10,7 +10,6 @@ Usage:
 import argparse
 import re
 import sys
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import yaml
@@ -19,14 +18,16 @@ import yaml
 class V2ToV3Converter:
     """Converts values-secret files from v2.0 to v3.0 format"""
 
-    def __init__(self, preserve_comments: bool = True):
+    def __init__(self, preserve_comments: bool = True, log_to_stderr: bool = False):
         self.preserve_comments = preserve_comments
         self.conversion_log: List[str] = []
+        self.log_to_stderr = log_to_stderr
 
     def log(self, message: str) -> None:
         """Log a conversion message"""
         self.conversion_log.append(message)
-        print(f"[CONVERT] {message}")
+        output = sys.stderr if self.log_to_stderr else sys.stdout
+        print(f"[CONVERT] {message}", file=output)
 
     def convert_vault_policies_to_policies(
         self, vault_policies: Dict[str, str]
@@ -271,34 +272,63 @@ class V2ToV3Converter:
 
         return v3_data
 
-    def write_output(self, v3_data: Dict[str, Any], output_path: str) -> None:
-        """Write the converted v3 data to output file"""
+    def write_output(
+        self, v3_data: Dict[str, Any], output_path: Optional[str] = None
+    ) -> None:
+        """Write the converted v3 data to output file or stdout"""
         try:
-            with open(output_path, "w") as f:
-                # Write header comment
-                f.write("# Converted from version 2.0 to 3.0 format\n")
-                f.write("# Original conversion performed by convert_v2_to_v3.py\n")
-                f.write("# Please review and test the converted configuration\n\n")
+            if output_path:
+                # Write to file
+                with open(output_path, "w") as f:
+                    # Write header comment
+                    f.write("# Converted from version 2.0 to 3.0 format\n")
+                    f.write("# Original conversion performed by convert_v2_to_v3.py\n")
+                    f.write("# Please review and test the converted configuration\n\n")
 
-                # Write YAML with proper formatting
+                    # Write YAML with proper formatting
+                    yaml.dump(
+                        v3_data, f, default_flow_style=False, sort_keys=False, indent=2
+                    )
+
+                self.log(f"Output written to: {output_path}")
+            else:
+                # Write to stdout
+                # Write header comment to stderr so it doesn't interfere with stdout
+                print("# Converted from version 2.0 to 3.0 format", file=sys.stderr)
+                print(
+                    "# Original conversion performed by convert_v2_to_v3.py",
+                    file=sys.stderr,
+                )
+                print(
+                    "# Please review and test the converted configuration",
+                    file=sys.stderr,
+                )
+                print("", file=sys.stderr)
+
+                # Write YAML to stdout
                 yaml.dump(
-                    v3_data, f, default_flow_style=False, sort_keys=False, indent=2
+                    v3_data,
+                    sys.stdout,
+                    default_flow_style=False,
+                    sort_keys=False,
+                    indent=2,
                 )
 
-            self.log(f"Output written to: {output_path}")
+                self.log("Output written to stdout")
 
         except Exception as e:
-            raise ValueError(f"Error writing output file: {e}")
+            raise ValueError(f"Error writing output: {e}")
 
-    def print_conversion_summary(self) -> None:
+    def print_conversion_summary(self, to_stderr: bool = False) -> None:
         """Print a summary of the conversion"""
-        print("\n" + "=" * 60)
-        print("CONVERSION SUMMARY")
-        print("=" * 60)
+        output = sys.stderr if to_stderr else sys.stdout
+        print("\n" + "=" * 60, file=output)
+        print("CONVERSION SUMMARY", file=output)
+        print("=" * 60, file=output)
         for message in self.conversion_log:
-            print(f"  {message}")
-        print("\nPlease review the converted file and test it thoroughly.")
-        print("Some manual adjustments may be required.")
+            print(f"  {message}", file=output)
+        print("\nPlease review the converted file and test it thoroughly.", file=output)
+        print("Some manual adjustments may be required.", file=output)
 
 
 def main():
@@ -309,7 +339,7 @@ def main():
 
     parser.add_argument("input", help="Input v2.0 YAML file path")
     parser.add_argument(
-        "output", nargs="?", help="Output v3.0 YAML file path (default: input_v3.yaml)"
+        "output", nargs="?", help="Output v3.0 YAML file path (default: stdout)"
     )
     parser.add_argument(
         "--quiet", "-q", action="store_true", help="Suppress conversion messages"
@@ -320,28 +350,29 @@ def main():
 
     args = parser.parse_args()
 
-    # Determine output path
-    if args.output:
-        output_path = args.output
-    else:
-        input_path = Path(args.input)
-        output_path = input_path.parent / f"{input_path.stem}_v3{input_path.suffix}"
-
     try:
-        converter = V2ToV3Converter()
+        # Use stderr for logging if outputting to stdout
+        converter = V2ToV3Converter(log_to_stderr=not args.output)
 
         # Suppress print statements if quiet mode
         if args.quiet:
-            converter.log = lambda msg: converter.conversion_log.append(msg)
+            converter.log = converter.conversion_log.append
 
         # Convert the file
         v3_data = converter.convert_file(args.input)
-        converter.write_output(v3_data, str(output_path))
 
-        if args.summary or not args.quiet:
-            converter.print_conversion_summary()
+        # Write output
+        converter.write_output(v3_data, args.output)
 
-        print(f"\n✅ Successfully converted {args.input} -> {output_path}")
+        # Print summary (but not if outputting to stdout and not in quiet mode)
+        if args.summary or (not args.quiet and args.output):
+            converter.print_conversion_summary(to_stderr=not args.output)
+
+        # Success message
+        if args.output:
+            print(f"\n✅ Successfully converted {args.input} -> {args.output}")
+        elif not args.quiet:
+            print(f"✅ Successfully converted {args.input} to stdout", file=sys.stderr)
 
     except Exception as e:
         print(f"❌ Error: {e}", file=sys.stderr)

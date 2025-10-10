@@ -28,17 +28,20 @@ The v2 to v3 converter automates the migration process from the legacy v2.0 secr
 #### Basic Usage
 
 ```bash
-# Convert a v2 file to v3 format
+# Convert a v2 file to v3 format and save to file
 python convert_v2_to_v3.py input-v2.yaml output-v3.yaml
 
-# Auto-generate output filename (creates input-v2_v3.yaml)
+# Convert and output to stdout (for piping)
 python convert_v2_to_v3.py input-v2.yaml
 
-# Quiet mode (suppress conversion messages)
-python convert_v2_to_v3.py input-v2.yaml output-v3.yaml --quiet
+# Quiet mode (suppress conversion messages, useful for piping)
+python convert_v2_to_v3.py input-v2.yaml --quiet > output-v3.yaml
+
+# Pipe conversion to another tool
+python convert_v2_to_v3.py input-v2.yaml | kubectl apply -f -
 
 # Show conversion summary
-python convert_v2_to_v3.py input-v2.yaml --summary
+python convert_v2_to_v3.py input-v2.yaml --summary > output-v3.yaml
 ```
 
 #### Example Conversion

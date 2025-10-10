@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """
 Comprehensive unit tests for the v2 to v3 YAML converter.
 """
@@ -25,7 +25,7 @@ class TestV2ToV3Converter(unittest.TestCase):
         """Set up test fixtures"""
         self.converter = V2ToV3Converter()
         # Suppress log output during tests
-        self.converter.log = lambda msg: self.converter.conversion_log.append(msg)
+        self.converter.log = self.converter.conversion_log.append
 
     def test_convert_vault_policies_basic(self):
         """Test basic vault policy conversion"""
@@ -360,7 +360,7 @@ rule "charset" { charset = "0123456789" min-chars = 1 }"""
 
     def test_conversion_log(self):
         """Test that conversion logging works"""
-        self.converter.log = lambda msg: self.converter.conversion_log.append(msg)
+        self.converter.log = self.converter.conversion_log.append
 
         vault_policies = {
             "test": """length=8
