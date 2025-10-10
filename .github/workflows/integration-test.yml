@@ -1,22 +1,22 @@
 ---
-name: Ansible collection sanity tests
+name: Ansible integration tests
 
 on: [push, pull_request]
 
 jobs:
   ansible_unittests:
-    name: Ansible collection sanity tests
+    name: Ansible integration tests
     strategy:
       matrix:
-        python-version: [3.11.3, 3.12.6]
-        ansible-core: ["2.16.*", "2.18.*"]
+        python-version: [3.12.6]
+        ansible-core: ["2.16.*"]
     runs-on: ubuntu-latest
     permissions:
       contents: read
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v5
         with:
           path: ansible_collections/rhvp/cluster_utils
           persist-credentials: false
@@ -31,7 +31,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install pytest ansible-core=='${{ matrix.ansible-core }}'
 
-      - name: Run make ansible-sanitytest
+      - name: Run make ansible-unittest
         run: |
           cd ansible_collections/rhvp/cluster_utils
-          make ansible-sanitytest
+          make integration-test-all
