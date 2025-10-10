@@ -1187,12 +1187,7 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         syaml = {
             "version": "3.0",
             "secretstore": "vault",
-            "policies": {
-                "custom": {
-                    "length": 16,
-                    "charset": "alphanumeric"
-                }
-            },
+            "policies": {"custom": {"length": 16, "charset": "alphanumeric"}},
             "secrets": {"test_secret": {"field1": "value1"}},
         }
         secrets = load_secrets_v3.SecretsV3Base(module, syaml)
@@ -1204,12 +1199,7 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         syaml = {
             "version": "3.0",
             "secretstore": "kubernetes",
-            "policies": {
-                "custom": {
-                    "length": 16,
-                    "charset": "alphanumeric"
-                }
-            },
+            "policies": {"custom": {"length": 16, "charset": "alphanumeric"}},
             "secrets": {"test_secret": {"field1": "value1"}},
         }
         secrets = load_secrets_v3.SecretsV3Base(module, syaml)
@@ -1224,12 +1214,7 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         syaml = {
             "version": "3.0",
             "secretstore": "aws-secrets-manager",
-            "policies": {
-                "custom": {
-                    "length": 16,
-                    "charset": "alphanumeric"
-                }
-            },
+            "policies": {"custom": {"length": 16, "charset": "alphanumeric"}},
             "secrets": {"test_secret": {"field1": "value1"}},
         }
         secrets = load_secrets_v3.SecretsV3Base(module, syaml)
@@ -1268,25 +1253,33 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         module = mock.MagicMock()
 
         # Test that kubernetes with policies fails
-        kubernetes_invalid_file = os.path.join(self.testdir_v3, "values-secret-v3-invalid-policies-kubernetes.yaml")
+        kubernetes_invalid_file = os.path.join(
+            self.testdir_v3, "values-secret-v3-invalid-policies-kubernetes.yaml"
+        )
         with open(kubernetes_invalid_file, "r", encoding="utf-8") as file:
             syaml = yaml.safe_load(file.read())
 
         secrets = load_secrets_v3.SecretsV3Base(module, syaml)
         result = secrets._validate_secrets()
         self.assertFalse(result[0])
-        self.assertIn("The 'policies' field is only valid when secretstore is 'vault'", result[1])
+        self.assertIn(
+            "The 'policies' field is only valid when secretstore is 'vault'", result[1]
+        )
         self.assertIn("but secretstore is 'kubernetes'", result[1])
 
         # Test that aws with policies fails
-        aws_invalid_file = os.path.join(self.testdir_v3, "values-secret-v3-invalid-policies-aws.yaml")
+        aws_invalid_file = os.path.join(
+            self.testdir_v3, "values-secret-v3-invalid-policies-aws.yaml"
+        )
         with open(aws_invalid_file, "r", encoding="utf-8") as file:
             syaml = yaml.safe_load(file.read())
 
         secrets = load_secrets_v3.SecretsV3Base(module, syaml)
         result = secrets._validate_secrets()
         self.assertFalse(result[0])
-        self.assertIn("The 'policies' field is only valid when secretstore is 'vault'", result[1])
+        self.assertIn(
+            "The 'policies' field is only valid when secretstore is 'vault'", result[1]
+        )
         self.assertIn("but secretstore is 'aws-secrets-manager'", result[1])
 
     def test_optional_field_successful_file_read(self, getpass):
