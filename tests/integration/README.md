@@ -61,21 +61,21 @@ python test_vault_integration.py
 
 **Container Management**: All integration tests automatically manage their own containers using direct Python subprocess calls. Each test suite starts and stops its own containers, so no manual container management or shell scripts are required.
 
-#### Vault Integration Tests
+#### Vault Test Configuration
 The Vault tests use a Vault container configured with:
 - **Address**: `http://localhost:8200`
 - **Root Token**: `myroot`
 - **Mode**: Development mode (in-memory storage)
 - **KV Engine**: v2 enabled at `secret/` path
 
-#### AWS Integration Tests
+#### AWS Test Configuration
 The AWS tests use LocalStack to simulate AWS Secrets Manager:
 - **Address**: `http://localhost:4566`
 - **Container**: `localstack/localstack:latest`
 - **Services**: AWS Secrets Manager enabled
 - **Mode**: Development mode (no persistence)
 
-#### Kubernetes Integration Tests
+#### Kubernetes Test Configuration
 The Kubernetes tests use Kind (Kubernetes in Docker):
 - **Cluster Name**: `vault-secrets-test`
 - **Tool**: `kind` command-line tool
@@ -84,7 +84,7 @@ The Kubernetes tests use Kind (Kubernetes in Docker):
 
 ### What the Tests Verify
 
-#### Vault Integration Tests
+#### Vault Test Scenarios
 1. **Container Setup**: Vault container starts and becomes healthy
 2. **Policy Creation**: Password generation policies are created in Vault
 3. **Secret Injection**: Secrets are properly injected into Vault paths
@@ -94,7 +94,7 @@ The Kubernetes tests use Kind (Kubernetes in Docker):
 7. **Target Overrides**: Per-secret target overrides work correctly
 8. **Error Handling**: Missing optional files are handled gracefully
 
-#### AWS Integration Tests
+#### AWS Test Scenarios
 1. **LocalStack Setup**: LocalStack container starts and Secrets Manager becomes available
 2. **AWS CLI Integration**: AWS CLI commands work with LocalStack endpoint
 3. **Secret Creation**: Secrets are properly created in AWS Secrets Manager format
@@ -102,7 +102,7 @@ The Kubernetes tests use Kind (Kubernetes in Docker):
 5. **Optional Fields**: Missing optional files don't cause test failures
 6. **Metadata Handling**: Secret names, descriptions, and tags are applied correctly
 
-#### Kubernetes Integration Tests
+#### Kubernetes Test Scenarios
 1. **Kind Cluster Setup**: Kind cluster starts and becomes ready
 2. **Namespace Creation**: Required test namespaces are created automatically
 3. **Secret Creation**: Kubernetes secrets are created with correct data and metadata

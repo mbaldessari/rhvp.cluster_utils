@@ -186,7 +186,10 @@ class TestAWSSecretsManagerIntegration(unittest.TestCase):
                 )
                 if response.status_code == 200:
                     health_data = response.json()
-                    if health_data.get("services", {}).get("secretsmanager") == "available":
+                    if (
+                        health_data.get("services", {}).get("secretsmanager")
+                        == "available"
+                    ):
                         print("LocalStack Secrets Manager is ready!")
                         return
             except requests.RequestException:
