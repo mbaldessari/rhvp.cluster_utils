@@ -43,26 +43,23 @@ ansible-unittest: ## run ansible unit tests
 	ansible-test units --docker --python 3.11 --python 3.12
 
 .PHONY: test
-test: ansible-sanitytest ansible-unittest
+test: ansible-sanitytest ansible-unittest integration-test-all ## Run all tests (sanity + unit + integration)
 
-.PHONY: integration-test-setup
-integration-test-setup: ## Install requirements for integration tests
-	pip install -r tests/integration/requirements.txt
+.PHONY: integration-test-kubernetes
+integration-test-kubernetes: ## Run Kubernetes secretstore integration tests with kind
+	@echo "Running Kubernetes secretstore integration tests..."
+	cd tests/integration && python test_kubernetes_integration.py
 
-.PHONY: integration-test
-integration-test: integration-test-setup ## Run integration tests with real Vault container
-	@echo "Running integration tests with real Vault container..."
-	cd tests/integration && python test_vault_simple.py
-
-.PHONY: integration-test-full
-integration-test-full: integration-test-setup ## Run full integration tests including Ansible playbook tests
+.PHONY: integration-test-vault
+integration-test-vault: ## Run full integration tests including Ansible playbook tests
 	@echo "Running full integration tests..."
 	cd tests/integration && python test_vault_simple.py
 	cd tests/integration && python test_vault_error_integration.py
 	cd tests/integration && ANSIBLE_COLLECTIONS_PATH=$(shell pwd)/../.. python test_vault_integration.py
 
-.PHONY: test-all
-test-all: test integration-test ## Run all tests (unit + integration)
+.PHONY: integration-test-all
+integration-test-all: integration-test-kubernetes integration-test-vault ## Run all integration tests (Vault + Kubernetes)
+	@echo "Running all integration tests..."
 
 .PHONY: check-jsonschema
 check-jsonschema: ## Runs check-jsonschema against all unit test files except known broken ones
