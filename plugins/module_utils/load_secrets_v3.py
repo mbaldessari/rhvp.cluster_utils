@@ -69,6 +69,8 @@ class SecretsV3Base:
     def __init__(self, module, syaml):
         self.module = module
         self.syaml = syaml
+        # Initialize errors list for error collection
+        self.errors = []
 
     def _get_version(self):
         """Get version from YAML, ensuring it's 3.0"""
@@ -530,9 +532,8 @@ class SecretsV3Base:
                 # For optional fields, return None and continue
                 return None
             else:
-                # For required fields, also return None but log the error
-                # This allows processing to continue
-                return None
+                # For required fields, fail immediately
+                self.module.fail_json(msg=error_msg)
 
     def _get_field_value_internal(self, field_type, param, secret_name, field_name):
         """Internal method to get field value (can raise exceptions)"""
@@ -650,8 +651,6 @@ class LoadSecretsV3(SecretsV3Base):
         self.pod = pod
         # Check for direct vault mode (for integration testing)
         self.direct_mode = os.environ.get("VAULT_DIRECT_MODE", "").lower() == "true"
-        # Collect errors instead of failing immediately
-        self.errors = []
 
     def _run_command(self, command, attempts=1, sleep=3, checkrc=True):
         """
