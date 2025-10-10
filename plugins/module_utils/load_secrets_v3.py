@@ -440,13 +440,14 @@ class SecretsV3Base:
                         False,
                         f"Secret '{secret_name}' field '{field_name}' has empty file path",
                     )
-                # Check if file exists
-                expanded_path = os.path.expanduser(param)
-                if not os.path.isfile(expanded_path):
-                    return (
-                        False,
-                        f"Secret '{secret_name}' field '{field_name}' file not found: {param}",
-                    )
+                # Check if file exists (skip for optional fields)
+                if not is_optional:
+                    expanded_path = os.path.expanduser(param)
+                    if not os.path.isfile(expanded_path):
+                        return (
+                            False,
+                            f"Secret '{secret_name}' field '{field_name}' file not found: {param}",
+                        )
                 return (True, "")
             case "file_base64":
                 if not param:
@@ -454,13 +455,14 @@ class SecretsV3Base:
                         False,
                         f"Secret '{secret_name}' field '{field_name}' has empty file path",
                     )
-                # Check if file exists
-                expanded_path = os.path.expanduser(param)
-                if not os.path.isfile(expanded_path):
-                    return (
-                        False,
-                        f"Secret '{secret_name}' field '{field_name}' file not found: {param}",
-                    )
+                # Check if file exists (skip for optional fields)
+                if not is_optional:
+                    expanded_path = os.path.expanduser(param)
+                    if not os.path.isfile(expanded_path):
+                        return (
+                            False,
+                            f"Secret '{secret_name}' field '{field_name}' file not found: {param}",
+                        )
                 return (True, "")
             case "ini":
                 if not param:
@@ -471,12 +473,14 @@ class SecretsV3Base:
                 # Parse and validate ini specification
                 try:
                     file_path, section, key = self._parse_ini_spec(param)
-                    expanded_path = os.path.expanduser(file_path)
-                    if not os.path.isfile(expanded_path):
-                        return (
-                            False,
-                            f"Secret '{secret_name}' field '{field_name}' ini file not found: {file_path}",
-                        )
+                    # Check if file exists (skip for optional fields)
+                    if not is_optional:
+                        expanded_path = os.path.expanduser(file_path)
+                        if not os.path.isfile(expanded_path):
+                            return (
+                                False,
+                                f"Secret '{secret_name}' field '{field_name}' ini file not found: {file_path}",
+                            )
                     return (True, "")
                 except ValueError as e:
                     return (
@@ -1084,10 +1088,8 @@ class LoadSecretsV3AWS(SecretsV3Base):
 
         # Add tags if provided
         if tags:
-            tags_list = []
             for key, value in tags.items():
-                tags_list.append(f"Key={key},Value={value}")
-            cmd_parts.extend(["--tags", ",".join(tags_list)])
+                cmd_parts.extend(["--tags", f"Key={key},Value={value}"])
 
         # Add replication regions if configured
         replication_regions = aws_config.get("replicationRegions", [])

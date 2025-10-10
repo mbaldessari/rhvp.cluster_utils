@@ -60,8 +60,13 @@ integration-test-vault: ## Run full integration tests including Ansible playbook
 	cd tests/integration && export ANSIBLE_COLLECTIONS_PATH=$(shell pwd)/../.. && python test_vault_error_integration.py
 	cd tests/integration && export ANSIBLE_COLLECTIONS_PATH=$(shell pwd)/../.. && python test_vault_integration.py
 
+.PHONY: integration-test-aws
+integration-test-aws: ## Run AWS Secrets Manager integration tests with LocalStack
+	@echo "Running AWS Secrets Manager integration tests..."
+	cd tests/integration && export ANSIBLE_COLLECTIONS_PATH=$(shell pwd)/../.. && python test_aws_secrets_integration.py
+
 .PHONY: integration-test-all
-integration-test-all: integration-test-kubernetes integration-test-vault ## Run all integration tests (Vault + Kubernetes)
+integration-test-all: integration-test-kubernetes integration-test-vault integration-test-aws ## Run all integration tests (Vault + Kubernetes + AWS)
 	@echo "Running all integration tests..."
 
 .PHONY: check-jsonschema
