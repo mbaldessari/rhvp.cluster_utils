@@ -73,4 +73,4 @@ check-jsonschema: ## Runs check-jsonschema against all unit test files except kn
 clean: ## Clean temporary files
 	rm -rf tests/output
 	find tests -iname '*.xml' -exec rm "{}" \;
-	find tests -iname '*.pyc' -exec rm "{}" \;
+	find -iname '*.pyc' -exec rm "{}" \;
