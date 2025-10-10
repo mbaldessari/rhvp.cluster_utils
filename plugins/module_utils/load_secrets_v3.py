@@ -26,6 +26,7 @@ import configparser
 import getpass
 import os
 import time
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from ansible_collections.rhvp.cluster_utils.plugins.module_utils.load_secrets_common import (
     find_dupes,
@@ -33,14 +34,14 @@ from ansible_collections.rhvp.cluster_utils.plugins.module_utils.load_secrets_co
 )
 
 # Default password policies for V3
-DEFAULT_V3_POLICIES = {
+DEFAULT_V3_POLICIES: Dict[str, Dict[str, Union[int, str]]] = {
     "basic": {"length": 16, "charset": "alphanumeric"},
     "medium": {"length": 20, "charset": "alphanumeric_symbols"},
     "strong": {"length": 32, "charset": "all"},
 }
 
 # Convert simplified charset names to vault policy format
-CHARSET_MAPPINGS = {
+CHARSET_MAPPINGS: Dict[str, Dict[str, str]] = {
     "alphanumeric": {
         "lowercase": "abcdefghijklmnopqrstuvwxyz",
         "uppercase": "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
@@ -66,20 +67,20 @@ class SecretsV3Base:
     Base class for V3 secrets handling with simplified syntax
     """
 
-    def __init__(self, module, syaml):
+    def __init__(self, module: Any, syaml: Dict[str, Any]) -> None:
         self.module = module
         self.syaml = syaml
         # Initialize errors list for error collection
-        self.errors = []
+        self.errors: List[str] = []
 
-    def _get_version(self):
+    def _get_version(self) -> str:
         """Get version from YAML, ensuring it's 3.0"""
         version = get_version(self.syaml)
         if version != "3.0":
             self.module.fail_json(f"Version is not 3.0: {version}")
         return version
 
-    def _get_settings(self):
+    def _get_settings(self) -> Dict[str, Any]:
         """Get global settings with defaults"""
         settings = self.syaml.get("settings", {})
         return {
@@ -87,26 +88,33 @@ class SecretsV3Base:
             "namespace": settings.get("namespace", "validated-patterns-secrets"),
         }
 
-    def _get_backing_store(self):
+    def _get_backing_store(self) -> str:
         """Get backing store with default"""
         return self.syaml.get("secretstore", "vault")
 
-    def _get_aws_config(self):
+    def _get_aws_config(self) -> Dict[str, Any]:
         """Get AWS configuration"""
         return self.syaml.get("awsConfig", {})
 
-    def _get_secrets(self):
+    def _get_secrets(self) -> Dict[str, Any]:
         """Get secrets dictionary"""
         return self.syaml.get("secrets", {})
 
-    def _get_policies(self):
+    def _get_policies(self) -> Dict[str, Union[str, Dict[str, Union[int, str]]]]:
         """Get vault policies, merging defaults with user-defined"""
         user_policies = self.syaml.get("policies", {})
-        policies = DEFAULT_V3_POLICIES.copy()
+        # Create a new dict with explicit type to handle the variance issue
+        policies: Dict[str, Union[str, Dict[str, Union[int, str]]]] = {}
+        # Copy defaults first
+        for k, v in DEFAULT_V3_POLICIES.items():
+            policies[k] = v
+        # Then update with user policies
         policies.update(user_policies)
         return policies
 
-    def _convert_policy_to_vault_format(self, policy_config):
+    def _convert_policy_to_vault_format(
+        self, policy_config: Dict[str, Union[int, str]]
+    ) -> str:
         """Convert simplified policy config to vault policy format"""
         length = policy_config.get("length", 16)
         charset = policy_config.get("charset", "alphanumeric")
@@ -116,16 +124,16 @@ class SecretsV3Base:
 
         vault_policy = f"length={length}\n"
 
-        charset_map = CHARSET_MAPPINGS[charset]
+        charset_map = CHARSET_MAPPINGS[str(charset)]
         for char_type, chars in charset_map.items():
             vault_policy += f'rule "charset" {{ charset = "{chars}" min-chars = 1 }}\n'
 
         return vault_policy
 
-    def _get_vault_policies(self):
+    def _get_vault_policies(self) -> Dict[str, str]:
         """Get vault policies in vault format"""
         policies = self._get_policies()
-        vault_policies = {}
+        vault_policies: Dict[str, str] = {}
 
         for name, config in policies.items():
             if isinstance(config, str):
@@ -137,7 +145,9 @@ class SecretsV3Base:
 
         return vault_policies
 
-    def _parse_field_instruction(self, instruction):
+    def _parse_field_instruction(
+        self, instruction: Union[str, Dict[str, Any], Any]
+    ) -> Tuple[str, Any, bool]:
         """Parse a field instruction into type and parameters"""
         # Handle object form: {value: "instruction", optional: true}
         if isinstance(instruction, dict):
@@ -180,7 +190,7 @@ class SecretsV3Base:
         else:
             return "static", actual_instruction, is_optional
 
-    def _validate_secrets(self):
+    def _validate_secrets(self) -> Tuple[bool, str]:
         """Validate the V3 secrets structure"""
         # Validate backing store
         backing_store = self._get_backing_store()
@@ -215,7 +225,9 @@ class SecretsV3Base:
 
         return (True, "")
 
-    def _validate_secret(self, secret_name, secret_config, backing_store):
+    def _validate_secret(
+        self, secret_name: str, secret_config: Any, backing_store: str
+    ) -> Tuple[bool, str]:
         """Validate a single secret"""
         if not isinstance(secret_config, dict):
             return (False, f"Secret '{secret_name}' must be a dictionary")
@@ -426,7 +438,13 @@ class SecretsV3Base:
 
         return (True, "")
 
-    def _validate_field(self, secret_name, field_name, instruction, backing_store):
+    def _validate_field(
+        self,
+        secret_name: str,
+        field_name: str,
+        instruction: Union[str, Dict[str, Any], Any],
+        backing_store: str,
+    ) -> Tuple[bool, str]:
         """Validate a single field instruction"""
         field_type, param, is_optional = self._parse_field_instruction(instruction)
 
@@ -520,7 +538,12 @@ class SecretsV3Base:
                     f"Secret '{secret_name}' field '{field_name}' has unknown instruction type",
                 )
 
-    def _get_field_value(self, secret_name, field_name, instruction):
+    def _get_field_value(
+        self,
+        secret_name: str,
+        field_name: str,
+        instruction: Union[str, Dict[str, Any], Any],
+    ) -> Optional[str]:
         """Get the actual value for a field based on its instruction"""
         field_type, param, is_optional = self._parse_field_instruction(instruction)
 
@@ -538,21 +561,27 @@ class SecretsV3Base:
             else:
                 # For required fields, fail immediately
                 self.module.fail_json(msg=error_msg)
+                return None  # This line will never be reached, but satisfies mypy
 
-    def _get_field_value_internal(self, field_type, param, secret_name, field_name):
+    def _get_field_value_internal(
+        self, field_type: str, param: Any, secret_name: str, field_name: str
+    ) -> Optional[str]:
         """Internal method to get field value (can raise exceptions)"""
         match field_type:
             case "static":
-                return param
+                return str(param) if param is not None else None
             case "file":
                 expanded_path = os.path.expanduser(param)
                 try:
-                    with open(expanded_path, "r") as f:
-                        content = f.read().strip()
-                    # Auto-detect binary files and base64 encode them
+                    # Auto-detect binary files and handle accordingly
                     if self._is_binary_file(expanded_path):
-                        return base64.b64encode(content.encode()).decode("utf-8")
-                    return content
+                        with open(expanded_path, "rb") as f:
+                            binary_content = f.read()
+                        return base64.b64encode(binary_content).decode("utf-8")
+                    else:
+                        with open(expanded_path, "r") as f:
+                            text_content = f.read().strip()
+                        return text_content
                 except Exception as e:
                     raise Exception(f"Error reading file {param}: {str(e)}")
             case "file_base64":
@@ -582,13 +611,13 @@ class SecretsV3Base:
             case _:
                 raise Exception(f"Unknown field type: {field_type}")
 
-    def _is_binary_file(self, filepath):
+    def _is_binary_file(self, filepath: str) -> bool:
         """Check if a file is binary (should be base64 encoded)"""
         binary_extensions = {".crt", ".pem", ".key", ".p12", ".pfx", ".der", ".cer"}
         _, ext = os.path.splitext(filepath.lower())  # pylint: disable=disallowed-name
         return ext in binary_extensions
 
-    def _parse_ini_spec(self, ini_spec):
+    def _parse_ini_spec(self, ini_spec: str) -> Tuple[str, str, str]:
         """
         Parse ini specification into file_path, section, and key
 
@@ -618,7 +647,7 @@ class SecretsV3Base:
 
         return file_path, section, key
 
-    def _read_ini_value(self, file_path, section, key):
+    def _read_ini_value(self, file_path: str, section: str, key: str) -> str:
         """Read a value from an INI file"""
         expanded_path = os.path.expanduser(file_path)
 
@@ -635,7 +664,7 @@ class SecretsV3Base:
 
         return config[section][key]
 
-    def sanitize_values(self):
+    def sanitize_values(self) -> None:
         """Validate the V3 secrets structure"""
         self._get_version()  # Validates version is 3.0
 
@@ -649,14 +678,18 @@ class LoadSecretsV3(SecretsV3Base):
     V3 implementation for loading secrets into vault
     """
 
-    def __init__(self, module, syaml, namespace, pod):
+    def __init__(
+        self, module: Any, syaml: Dict[str, Any], namespace: str, pod: str
+    ) -> None:
         super().__init__(module, syaml)
         self.namespace = namespace
         self.pod = pod
         # Check for direct vault mode (for integration testing)
         self.direct_mode = os.environ.get("VAULT_DIRECT_MODE", "").lower() == "true"
 
-    def _run_command(self, command, attempts=1, sleep=3, checkrc=True):
+    def _run_command(
+        self, command: str, attempts: int = 1, sleep: int = 3, checkrc: bool = True
+    ) -> Tuple[int, str, str]:
         """
         Runs a command on the host ansible is running on. A failing command
         will be logged as an error but processing will continue
@@ -684,8 +717,10 @@ class LoadSecretsV3(SecretsV3Base):
                 self.errors.append(error_msg)
                 return ret
             time.sleep(sleep)
+        # This should never be reached, but satisfies mypy
+        return (1, "", "Unexpected error")
 
-    def inject_vault_policies(self):
+    def inject_vault_policies(self) -> None:
         """Inject vault policies for password generation"""
         for name, policy in self._get_vault_policies().items():
             if self.direct_mode:
@@ -709,7 +744,9 @@ class LoadSecretsV3(SecretsV3Base):
                 )
                 self._run_command(cmd, attempts=3)
 
-    def _inject_secret(self, secret_name, secret_config, mount="secret"):
+    def _inject_secret(
+        self, secret_name: str, secret_config: Dict[str, Any], mount: str = "secret"
+    ) -> None:
         """Inject a single secret into vault"""
         settings = self._get_settings()
         targets = secret_config.get("targets", settings["targets"])
@@ -725,7 +762,15 @@ class LoadSecretsV3(SecretsV3Base):
             )
             field_count += 1
 
-    def _inject_field(self, secret_name, field_name, instruction, mount, targets, verb):
+    def _inject_field(
+        self,
+        secret_name: str,
+        field_name: str,
+        instruction: Union[str, Dict[str, Any], Any],
+        mount: str,
+        targets: List[str],
+        verb: str,
+    ) -> None:
         """Inject a single field into vault"""
         field_type, param, is_optional = self._parse_field_instruction(instruction)
 
@@ -743,8 +788,14 @@ class LoadSecretsV3(SecretsV3Base):
                 # If value is None (optional field failed), skip this field
 
     def _inject_generated_field(
-        self, secret_name, field_name, policy_name, mount, targets, verb
-    ):
+        self,
+        secret_name: str,
+        field_name: str,
+        policy_name: str,
+        mount: str,
+        targets: List[str],
+        verb: str,
+    ) -> None:
         """Inject a generated field using vault policy"""
         gen_cmd = (
             f"vault read -field=password sys/policies/password/{policy_name}/generate"
@@ -768,8 +819,14 @@ class LoadSecretsV3(SecretsV3Base):
                 self.errors.append(error_msg)
 
     def _inject_static_field(
-        self, secret_name, field_name, value, mount, targets, verb
-    ):
+        self,
+        secret_name: str,
+        field_name: str,
+        value: str,
+        mount: str,
+        targets: List[str],
+        verb: str,
+    ) -> None:
         """Inject a static field value"""
         for target in targets:
             if self.direct_mode:
@@ -788,7 +845,7 @@ class LoadSecretsV3(SecretsV3Base):
                 error_msg = f"Failed to inject static field '{field_name}' for secret '{secret_name}' in target '{target}'"
                 self.errors.append(error_msg)
 
-    def inject_secrets(self):
+    def inject_secrets(self) -> int:
         """Inject all secrets into vault"""
         # Inject vault policies first
         self.inject_vault_policies()
@@ -821,10 +878,10 @@ class LoadSecretsV3Kubernetes(SecretsV3Base):
     V3 implementation for loading secrets into Kubernetes
     """
 
-    def __init__(self, module, syaml):
+    def __init__(self, module: Any, syaml: Dict[str, Any]) -> None:
         super().__init__(module, syaml)
 
-    def _get_namespaces_for_secret(self, secret_config):
+    def _get_namespaces_for_secret(self, secret_config: Dict[str, Any]) -> List[str]:
         """Get the namespaces for a secret, either from config or default"""
         if "namespaces" in secret_config:
             namespaces = secret_config["namespaces"]
@@ -838,19 +895,21 @@ class LoadSecretsV3Kubernetes(SecretsV3Base):
         default_namespace = settings.get("namespace", "validated-patterns-secrets")
         return [default_namespace]
 
-    def _get_secret_type(self, secret_config):
+    def _get_secret_type(self, secret_config: Dict[str, Any]) -> str:
         """Get the Kubernetes secret type"""
         return secret_config.get("type", "Opaque")
 
-    def _get_secret_labels(self, secret_config):
+    def _get_secret_labels(self, secret_config: Dict[str, Any]) -> Dict[str, str]:
         """Get the labels for the secret"""
         return secret_config.get("labels", {})
 
-    def _get_secret_annotations(self, secret_config):
+    def _get_secret_annotations(self, secret_config: Dict[str, Any]) -> Dict[str, str]:
         """Get the annotations for the secret"""
         return secret_config.get("annotations", {})
 
-    def _create_kubernetes_secret(self, secret_name, secret_config):
+    def _create_kubernetes_secret(
+        self, secret_name: str, secret_config: Dict[str, Any]
+    ) -> int:
         """Create a Kubernetes secret"""
         namespaces = self._get_namespaces_for_secret(secret_config)
         secret_type = self._get_secret_type(secret_config)
@@ -858,7 +917,7 @@ class LoadSecretsV3Kubernetes(SecretsV3Base):
         annotations = self._get_secret_annotations(secret_config)
 
         # Collect secret data
-        secret_data = {}
+        secret_data: Dict[str, str] = {}
         reserved_fields = ["namespaces", "type", "labels", "annotations"]
 
         for field_name, instruction in secret_config.items():
@@ -885,12 +944,18 @@ class LoadSecretsV3Kubernetes(SecretsV3Base):
         return total_created
 
     def _create_secret_in_namespace(
-        self, secret_name, namespace, secret_type, labels, annotations, secret_data
-    ):
+        self,
+        secret_name: str,
+        namespace: str,
+        secret_type: str,
+        labels: Dict[str, str],
+        annotations: Dict[str, str],
+        secret_data: Dict[str, str],
+    ) -> bool:
         """Create a single Kubernetes secret in a specific namespace"""
         try:
             # Prepare secret manifest
-            secret_manifest = {
+            secret_manifest: Dict[str, Any] = {
                 "apiVersion": "v1",
                 "kind": "Secret",
                 "metadata": {
@@ -953,7 +1018,7 @@ class LoadSecretsV3Kubernetes(SecretsV3Base):
             )
             return False
 
-    def inject_secrets(self):
+    def inject_secrets(self) -> int:
         """Inject all secrets into Kubernetes"""
         secrets = self._get_secrets()
         total_secrets = 0
@@ -970,10 +1035,12 @@ class LoadSecretsV3AWS(SecretsV3Base):
     V3 implementation for loading secrets into AWS Secrets Manager
     """
 
-    def __init__(self, module, syaml):
+    def __init__(self, module: Any, syaml: Dict[str, Any]) -> None:
         super().__init__(module, syaml)
 
-    def _get_secret_name_for_aws(self, secret_key, secret_config):
+    def _get_secret_name_for_aws(
+        self, secret_key: str, secret_config: Dict[str, Any]
+    ) -> str:
         """Get the full secret name for AWS Secrets Manager"""
         aws_config = self._get_aws_config()
         prefix = aws_config.get("prefix", "")
@@ -990,16 +1057,16 @@ class LoadSecretsV3AWS(SecretsV3Base):
         else:
             return secret_name
 
-    def _get_secret_description(self, secret_config):
+    def _get_secret_description(self, secret_config: Dict[str, Any]) -> str:
         """Get description for the secret"""
         return secret_config.get("description", "")
 
-    def _get_secret_kms_key_id(self, secret_config):
+    def _get_secret_kms_key_id(self, secret_config: Dict[str, Any]) -> Optional[str]:
         """Get KMS key ID for the secret"""
         aws_config = self._get_aws_config()
         return secret_config.get("kmsKeyId", aws_config.get("defaultKmsKeyId"))
 
-    def _get_secret_tags(self, secret_config):
+    def _get_secret_tags(self, secret_config: Dict[str, Any]) -> Dict[str, str]:
         """Get tags for the secret, merging defaults with secret-specific tags"""
         aws_config = self._get_aws_config()
         default_tags = aws_config.get("defaultTags", {})
@@ -1010,11 +1077,13 @@ class LoadSecretsV3AWS(SecretsV3Base):
         merged_tags.update(secret_tags)
         return merged_tags
 
-    def _get_secret_automatic_rotation(self, secret_config):
+    def _get_secret_automatic_rotation(
+        self, secret_config: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
         """Get automatic rotation configuration"""
         return secret_config.get("automaticRotation")
 
-    def _create_aws_secret(self, secret_key, secret_config):
+    def _create_aws_secret(self, secret_key: str, secret_config: Dict[str, Any]) -> int:
         """Create an AWS Secrets Manager secret"""
         secret_name = self._get_secret_name_for_aws(secret_key, secret_config)
         description = self._get_secret_description(secret_config)
@@ -1023,7 +1092,7 @@ class LoadSecretsV3AWS(SecretsV3Base):
         rotation_config = self._get_secret_automatic_rotation(secret_config)
 
         # Collect secret data
-        secret_data = {}
+        secret_data: Dict[str, str] = {}
         reserved_fields = [
             "secretName",
             "description",
@@ -1057,8 +1126,14 @@ class LoadSecretsV3AWS(SecretsV3Base):
             return 0
 
     def _create_secret_with_aws_cli(
-        self, secret_name, secret_data, description, kms_key_id, tags, rotation_config
-    ):
+        self,
+        secret_name: str,
+        secret_data: Dict[str, str],
+        description: str,
+        kms_key_id: Optional[str],
+        tags: Dict[str, str],
+        rotation_config: Optional[Dict[str, Any]],
+    ) -> bool:
         """Create secret using AWS CLI"""
         import json
 
@@ -1128,8 +1203,13 @@ class LoadSecretsV3AWS(SecretsV3Base):
         return True
 
     def _update_existing_secret(
-        self, secret_name, secret_data, description, region, profile
-    ):
+        self,
+        secret_name: str,
+        secret_data: Dict[str, str],
+        description: str,
+        region: Optional[str],
+        profile: Optional[str],
+    ) -> bool:
         """Update an existing secret"""
         import json
 
@@ -1153,8 +1233,12 @@ class LoadSecretsV3AWS(SecretsV3Base):
         return result[0] == 0
 
     def _configure_automatic_rotation(
-        self, secret_name, rotation_config, region, profile
-    ):
+        self,
+        secret_name: str,
+        rotation_config: Dict[str, Any],
+        region: Optional[str],
+        profile: Optional[str],
+    ) -> None:
         """Configure automatic rotation for a secret"""
         cmd_parts = ["aws", "secretsmanager", "rotate-secret"]
         cmd_parts.extend(["--secret-id", secret_name])
@@ -1186,7 +1270,7 @@ class LoadSecretsV3AWS(SecretsV3Base):
                 f"Failed to configure rotation for secret {secret_name}: {result[2]}"
             )
 
-    def inject_secrets(self):
+    def inject_secrets(self) -> int:
         """Inject all secrets into AWS Secrets Manager"""
         secrets = self._get_secrets()
         total_secrets = 0

@@ -21,6 +21,7 @@ import base64
 import json
 import os
 import unittest
+from typing import Any, Dict
 from unittest import mock
 from unittest.mock import patch
 
@@ -31,10 +32,10 @@ from ansible_collections.rhvp.cluster_utils.plugins.module_utils import load_sec
 from ansible_collections.rhvp.cluster_utils.plugins.modules import vault_load_secrets
 
 
-def set_module_args(args):
+def set_module_args(args: Dict[str, Any]) -> None:
     """prepare arguments so that they will be picked up during module creation"""
-    args = json.dumps({"ANSIBLE_MODULE_ARGS": args})
-    basic._ANSIBLE_ARGS = to_bytes(args)
+    args_json = json.dumps({"ANSIBLE_MODULE_ARGS": args})
+    basic._ANSIBLE_ARGS = to_bytes(args_json)
 
 
 class AnsibleExitJson(Exception):
@@ -49,14 +50,14 @@ class AnsibleFailJson(Exception):
     pass
 
 
-def exit_json(*args, **kwargs):
+def exit_json(*args: Any, **kwargs: Any) -> None:
     """function to patch over exit_json; package return data into an exception"""
     if "changed" not in kwargs:
         kwargs["changed"] = False
     raise AnsibleExitJson(kwargs)
 
 
-def fail_json(*args, **kwargs):
+def fail_json(*args: Any, **kwargs: Any) -> None:
     """function to patch over fail_json; package return data into an exception"""
     kwargs["failed"] = True
     kwargs["args"] = args
@@ -65,7 +66,7 @@ def fail_json(*args, **kwargs):
 
 @mock.patch("getpass.getpass")
 class TestVaultLoadSecretsV3(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.mock_module_helper = patch.multiple(
             basic.AnsibleModule, exit_json=exit_json, fail_json=fail_json
         )
@@ -76,15 +77,17 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         os.environ["HOME"] = self.testdir_v3
         self.test_file = os.path.expanduser("~/test-file-contents")
 
-    def tearDown(self):
+    def tearDown(self) -> None:
         os.environ["HOME"] = self.orig_home
 
-    def test_module_fail_when_required_args_missing(self, getpass):
+    def test_module_fail_when_required_args_missing(
+        self, getpass: mock.MagicMock
+    ) -> None:
         with self.assertRaises(AnsibleFailJson):
             set_module_args({})
             vault_load_secrets.main()
 
-    def test_parse_field_instruction_file_base64(self, getpass):
+    def test_parse_field_instruction_file_base64(self, getpass: mock.MagicMock) -> None:
         """Test parsing of file+base64:// instructions"""
         # Create a mock module and secrets instance
         module = mock.MagicMock()
@@ -1171,12 +1174,12 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         # Test optional static number
         instruction = {"value": 42, "optional": True}
         value = secrets._get_field_value("test_secret", "test_field", instruction)
-        self.assertEqual(value, 42)
+        self.assertEqual(value, "42")  # Static values are converted to strings
 
         # Test optional static boolean
         instruction = {"value": True, "optional": True}
         value = secrets._get_field_value("test_secret", "test_field", instruction)
-        self.assertTrue(value)
+        self.assertEqual(value, "True")  # Static values are converted to strings
 
     def test_policies_only_valid_with_vault_secretstore(self, getpass):
         """Test that 'policies' field is only valid when secretstore is 'vault'"""

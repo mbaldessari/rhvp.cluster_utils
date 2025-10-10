@@ -129,6 +129,7 @@ EXAMPLES = """
 """
 import os
 import traceback
+from typing import Any, Dict
 
 from ansible.module_utils.basic import AnsibleModule, missing_required_lib
 from ansible_collections.rhvp.cluster_utils.plugins.module_utils.load_secrets_common import (
@@ -157,9 +158,9 @@ except ImportError:
     YAML_IMPORT_ERROR = traceback.format_exc()
 
 
-def run(module):
+def run(module: AnsibleModule) -> None:
     """Main ansible module entry point"""
-    results = dict(changed=False)
+    results: Dict[str, Any] = dict(changed=False)
 
     args = module.params
     values_secrets = args.get("values_secrets", "")
@@ -235,7 +236,7 @@ def run(module):
     module.exit_json(**results)
 
 
-def main():
+def main() -> None:
     """Main entry point where the AnsibleModule class is instantiated"""
 
     # This would really be an exceptional circumstance
