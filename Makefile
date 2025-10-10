@@ -16,6 +16,7 @@ super-linter: clean ## Runs super linter locally
 					-e VALIDATE_DOCKERFILE_HADOLINT=false \
 					-e VALIDATE_JSCPD=false \
 					-e VALIDATE_JSON_PRETTIER=false \
+					-e VALIDATE_KUBERNETES_KUBECONFORM=false \
 					-e VALIDATE_MARKDOWN_PRETTIER=false \
 					-e VALIDATE_PYTHON_PYLINT=false \
 					-e VALIDATE_PYTHON_PYINK=false \
