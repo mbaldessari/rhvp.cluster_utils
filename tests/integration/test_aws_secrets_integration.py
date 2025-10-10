@@ -24,9 +24,11 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
+import requests
 import yaml
 
 
@@ -40,22 +42,12 @@ class TestAWSSecretsManagerIntegration(unittest.TestCase):
 
         cls.test_dir = Path(__file__).parent
         cls.collection_root = cls.test_dir.parent.parent
-
-        # Start LocalStack
-        result = subprocess.run(
-            ["./aws-helper.sh", "start"],
-            cwd=cls.test_dir,
-            capture_output=True,
-            check=False,
-            text=True,
-        )
-
-        if result.returncode != 0:
-            raise Exception(f"Failed to start LocalStack: {result.stderr}")
+        cls.container_name = "localstack-test"
+        cls.localstack_port = "4566"
 
         # Set up AWS environment variables
         cls.aws_env = {
-            "AWS_ENDPOINT_URL": "http://localhost:4566",
+            "AWS_ENDPOINT_URL": f"http://localhost:{cls.localstack_port}",
             "AWS_ACCESS_KEY_ID": "test",
             "AWS_SECRET_ACCESS_KEY": "test",
             "AWS_DEFAULT_REGION": "us-east-1",
@@ -66,17 +58,14 @@ class TestAWSSecretsManagerIntegration(unittest.TestCase):
         for key, value in cls.aws_env.items():
             os.environ[key] = value
 
-        # Test connectivity
-        result = subprocess.run(
-            ["./aws-helper.sh", "test"],
-            cwd=cls.test_dir,
-            capture_output=True,
-            check=False,
-            text=True,
-        )
+        # Start LocalStack using direct Docker commands
+        cls._start_localstack()
 
-        if result.returncode != 0:
-            raise Exception(f"LocalStack connectivity test failed: {result.stderr}")
+        # Wait for LocalStack to be ready
+        cls._wait_for_localstack()
+
+        # Test connectivity
+        cls._test_connectivity()
 
         print("LocalStack is ready for testing")
 
@@ -86,20 +75,10 @@ class TestAWSSecretsManagerIntegration(unittest.TestCase):
         print("Cleaning up LocalStack...")
 
         # Clean up test data
-        subprocess.run(
-            ["./aws-helper.sh", "cleanup-data"],
-            cwd=cls.test_dir,
-            capture_output=True,
-            check=False,
-        )
+        cls._cleanup_test_data()
 
         # Stop LocalStack
-        subprocess.run(
-            ["./aws-helper.sh", "stop"],
-            cwd=cls.test_dir,
-            capture_output=True,
-            check=False,
-        )
+        cls._stop_localstack()
 
         # Clean up environment variables
         for key in [
@@ -114,12 +93,178 @@ class TestAWSSecretsManagerIntegration(unittest.TestCase):
     def setUp(self):
         """Set up for each test"""
         # Clean up any existing test data
-        subprocess.run(
-            ["./aws-helper.sh", "cleanup-data"],
-            cwd=self.test_dir,
+        self._cleanup_test_data()
+
+    @classmethod
+    def _is_localstack_running(cls):
+        """Check if LocalStack container is running"""
+        result = subprocess.run(
+            ["docker", "ps", "--format", "table {{.Names}}"],
             capture_output=True,
+            text=True,
             check=False,
         )
+        return cls.container_name in result.stdout
+
+    @classmethod
+    def _start_localstack(cls):
+        """Start LocalStack container using direct Docker commands"""
+        print("Starting LocalStack container...")
+
+        if cls._is_localstack_running():
+            print("LocalStack container is already running")
+            return
+
+        # Remove any existing stopped container
+        subprocess.run(
+            ["docker", "rm", "-f", cls.container_name],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        # Start LocalStack container
+        result = subprocess.run(
+            [
+                "docker",
+                "run",
+                "-d",
+                "--name",
+                cls.container_name,
+                "-p",
+                f"{cls.localstack_port}:4566",
+                "-e",
+                "SERVICES=secretsmanager",
+                "-e",
+                "DEBUG=1",
+                "-e",
+                "PERSISTENCE=0",
+                "docker.io/localstack/localstack:latest",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        if result.returncode != 0:
+            raise Exception(f"Failed to start LocalStack container: {result.stderr}")
+
+        print("LocalStack container started")
+
+    @classmethod
+    def _stop_localstack(cls):
+        """Stop and remove LocalStack container"""
+        print("Stopping LocalStack container...")
+
+        if cls._is_localstack_running():
+            subprocess.run(
+                ["docker", "stop", cls.container_name],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            subprocess.run(
+                ["docker", "rm", cls.container_name],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            print("LocalStack container stopped and removed")
+        else:
+            print("LocalStack container is not running")
+
+    @classmethod
+    def _wait_for_localstack(cls, timeout=60):
+        """Wait for LocalStack to be ready"""
+        print("Waiting for LocalStack to be ready...")
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            try:
+                response = requests.get(
+                    f"http://localhost:{cls.localstack_port}/_localstack/health",
+                    timeout=5,
+                )
+                if response.status_code == 200:
+                    health_data = response.json()
+                    if health_data.get("services", {}).get("secretsmanager") == "available":
+                        print("LocalStack Secrets Manager is ready!")
+                        return
+            except requests.RequestException:
+                pass
+            time.sleep(2)
+        raise Exception("LocalStack did not become ready within timeout")
+
+    @classmethod
+    def _test_connectivity(cls):
+        """Test AWS CLI connectivity to LocalStack"""
+        print("Testing AWS CLI connectivity to LocalStack...")
+
+        # Test by listing secrets (should return empty list)
+        result = subprocess.run(
+            [
+                "aws",
+                "secretsmanager",
+                "list-secrets",
+                "--endpoint-url",
+                f"http://localhost:{cls.localstack_port}",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            env={**os.environ, **cls.aws_env},
+        )
+
+        if result.returncode == 0:
+            print("AWS CLI connectivity test passed")
+        else:
+            raise Exception(f"AWS CLI connectivity test failed: {result.stderr}")
+
+    @classmethod
+    def _cleanup_test_data(cls):
+        """Clean up test data from LocalStack"""
+        print("Cleaning up test data...")
+
+        # List and delete all secrets
+        result = subprocess.run(
+            [
+                "aws",
+                "secretsmanager",
+                "list-secrets",
+                "--endpoint-url",
+                f"http://localhost:{cls.localstack_port}",
+                "--query",
+                "SecretList[].Name",
+                "--output",
+                "text",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            env={**os.environ, **cls.aws_env},
+        )
+
+        if result.returncode == 0 and result.stdout.strip():
+            secret_names = result.stdout.strip().split()
+            for secret_name in secret_names:
+                if secret_name and secret_name != "None":
+                    subprocess.run(
+                        [
+                            "aws",
+                            "secretsmanager",
+                            "delete-secret",
+                            "--secret-id",
+                            secret_name,
+                            "--force-delete-without-recovery",
+                            "--endpoint-url",
+                            f"http://localhost:{cls.localstack_port}",
+                        ],
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                        env={**os.environ, **cls.aws_env},
+                    )
+
+        print("Test data cleanup completed")
 
     def test_aws_secrets_manager_basic_functionality(self):
         """Test basic AWS Secrets Manager functionality with LocalStack"""

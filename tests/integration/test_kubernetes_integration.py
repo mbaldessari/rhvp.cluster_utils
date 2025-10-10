@@ -22,19 +22,11 @@ class KubernetesIntegrationTest(unittest.TestCase):
         """Set up kind cluster and wait for it to be ready"""
         cls.test_dir = Path(__file__).parent
         cls.collection_root = cls.test_dir.parent.parent
+        cls.cluster_name = "vault-secrets-test"
         cls.kubeconfig_file = cls.test_dir / "kubeconfig-kind"
 
-        # Start kind cluster using helper script
-        print("Starting kind cluster...")
-        result = subprocess.run(
-            [str(cls.test_dir / "kind-helper.sh"), "start"],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-
-        if result.returncode != 0:
-            raise Exception(f"Failed to start kind cluster: {result.stderr}")
+        # Start kind cluster using direct kind commands
+        cls._start_kind_cluster()
 
         print("Kind cluster started successfully")
         cls._wait_for_cluster()
@@ -42,14 +34,123 @@ class KubernetesIntegrationTest(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         """Clean up kind cluster"""
-        print("Stopping kind cluster...")
+        cls._stop_kind_cluster()
+        print("Kind cluster stopped")
+
+    @classmethod
+    def _cluster_exists(cls):
+        """Check if the kind cluster already exists"""
         result = subprocess.run(
-            [str(cls.test_dir / "kind-helper.sh"), "stop"],
+            ["kind", "get", "clusters"],
             capture_output=True,
             text=True,
             check=False,
         )
-        print("Kind cluster stopped")
+        return result.returncode == 0 and cls.cluster_name in result.stdout
+
+    @classmethod
+    def _start_kind_cluster(cls):
+        """Start kind cluster using direct kind commands"""
+        print("Starting kind cluster...")
+
+        # Check if cluster already exists
+        if cls._cluster_exists():
+            print(f"Cluster {cls.cluster_name} already exists")
+            # Export kubeconfig for existing cluster
+            result = subprocess.run(
+                [
+                    "kind",
+                    "export",
+                    "kubeconfig",
+                    "--name",
+                    cls.cluster_name,
+                    "--kubeconfig",
+                    str(cls.kubeconfig_file),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if result.returncode != 0:
+                raise Exception(f"Failed to export kubeconfig: {result.stderr}")
+            return
+
+        # Create cluster
+        result = subprocess.run(
+            [
+                "kind",
+                "create",
+                "cluster",
+                "--name",
+                cls.cluster_name,
+                "--kubeconfig",
+                str(cls.kubeconfig_file),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        if result.returncode != 0:
+            raise Exception(f"Failed to create kind cluster: {result.stderr}")
+
+        print("Waiting for cluster to be ready...")
+        result = subprocess.run(
+            [
+                "kubectl",
+                f"--kubeconfig={cls.kubeconfig_file}",
+                "wait",
+                "--for=condition=Ready",
+                "nodes",
+                "--all",
+                "--timeout=300s",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        if result.returncode != 0:
+            raise Exception(f"Cluster nodes did not become ready: {result.stderr}")
+
+        # Create test namespaces
+        namespaces = ["test-namespace", "production", "test-secrets"]
+        for namespace in namespaces:
+            subprocess.run(
+                [
+                    "kubectl",
+                    f"--kubeconfig={cls.kubeconfig_file}",
+                    "create",
+                    "namespace",
+                    namespace,
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+        print("✅ Kind cluster started and ready")
+        print(f"📋 Cluster name: {cls.cluster_name}")
+        print(f"📄 Kubeconfig: {cls.kubeconfig_file}")
+
+    @classmethod
+    def _stop_kind_cluster(cls):
+        """Stop and remove kind cluster"""
+        print("Stopping kind cluster...")
+
+        # Delete cluster
+        subprocess.run(
+            ["kind", "delete", "cluster", "--name", cls.cluster_name],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        # Remove kubeconfig file
+        if cls.kubeconfig_file.exists():
+            cls.kubeconfig_file.unlink()
+
+        print("Kind cluster stopped and kubeconfig cleaned")
 
     @classmethod
     def _wait_for_cluster(cls, timeout=300):
