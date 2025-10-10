@@ -486,7 +486,7 @@ class SecretsV3Base:
                 if backing_store in ["kubernetes", "aws-secrets-manager"]:
                     return (
                         False,
-                        f"Secret '{secret_name}' field '{field_name}' uses 'generate:' instruction which is not supported with {backing_store} secretstore. Use 'prompt:' instead.",
+                        f"Secret '{secret_name}' field '{field_name}' uses 'generate:' instruction which is not supported with {backing_store} secretstore. Use 'prompt:' instead.",  # noqa: E501
                     )
                 if not param:
                     return (
@@ -580,7 +580,7 @@ class SecretsV3Base:
     def _is_binary_file(self, filepath):
         """Check if a file is binary (should be base64 encoded)"""
         binary_extensions = {".crt", ".pem", ".key", ".p12", ".pfx", ".der", ".cer"}
-        _, ext = os.path.splitext(filepath.lower())
+        _, ext = os.path.splitext(filepath.lower())  # pylint: disable=disallowed-name
         return ext in binary_extensions
 
     def _parse_ini_spec(self, ini_spec):
@@ -752,7 +752,7 @@ class LoadSecretsV3(SecretsV3Base):
                 # Direct mode: use podman exec to run commands in vault container
                 vault_addr = os.environ.get("VAULT_ADDR", "http://localhost:8200")
                 vault_token = os.environ.get("VAULT_TOKEN", "myroot")
-                cmd = f'podman exec vault-test sh -c "VAULT_ADDR={vault_addr} VAULT_TOKEN={vault_token} {gen_cmd} | VAULT_ADDR={vault_addr} VAULT_TOKEN={vault_token} vault kv {verb} -mount={mount} {target}/{secret_name} {field_name}=-"'
+                cmd = f'podman exec vault-test sh -c "VAULT_ADDR={vault_addr} VAULT_TOKEN={vault_token} {gen_cmd} | VAULT_ADDR={vault_addr} VAULT_TOKEN={vault_token} vault kv {verb} -mount={mount} {target}/{secret_name} {field_name}=-"'  # noqa: E501
             else:
                 # OpenShift mode: use oc exec
                 cmd = (
@@ -773,7 +773,7 @@ class LoadSecretsV3(SecretsV3Base):
                 # Direct mode: use podman exec to run commands in vault container
                 vault_addr = os.environ.get("VAULT_ADDR", "http://localhost:8200")
                 vault_token = os.environ.get("VAULT_TOKEN", "myroot")
-                cmd = f"podman exec vault-test sh -c \"VAULT_ADDR={vault_addr} VAULT_TOKEN={vault_token} vault kv {verb} -mount={mount} {target}/{secret_name} {field_name}='{value}'\""
+                cmd = f"podman exec vault-test sh -c \"VAULT_ADDR={vault_addr} VAULT_TOKEN={vault_token} vault kv {verb} -mount={mount} {target}/{secret_name} {field_name}='{value}'\""  # noqa: E501
             else:
                 # OpenShift mode: use oc exec
                 cmd = (

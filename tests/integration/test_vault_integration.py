@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """
 Integration test for vault_load_secrets with real HashiCorp Vault
 """

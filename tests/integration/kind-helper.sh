@@ -1,7 +1,5 @@
-#!/bin/bash
+#!/bin/bash -eu
 # Helper script to manage kind cluster for integration testing
-
-set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLUSTER_NAME="vault-secrets-test"
