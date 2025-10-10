@@ -44,7 +44,7 @@ ansible-unittest: ## run ansible unit tests
 	ansible-test units --venv --python 3.11 --python 3.12
 
 .PHONY: test
-test: ansible-sanitytest ansible-unittest integration-test-all ## Run all tests (sanity + unit + integration)
+test: ansible-sanitytest ansible-unittest integration-test-all test-converted ## Run all tests (sanity + unit + integration and converter)
 
 .PHONY: integration-test-kubernetes
 integration-test-kubernetes: ## Run Kubernetes secretstore integration tests with kind
@@ -74,8 +74,15 @@ check-jsonschema: ## Runs check-jsonschema against all unit test files except kn
 	set -e; \
 	for i in values-secret-v2-base values-secret-v2-generic-onlygenerate values-secret-v2-block-yamlstring; do echo "$$i"; check-jsonschema --schemafile ./roles/vault_utils/values-secrets.v2.schema.json "tests/unit/v2/$$i.yaml"; done
 
+##@ Utility Scripts
+
+.PHONY: test-converter
+test-converter: ## Run unit tests for the v2 to v3 converter
+	python tests/unit/test_convert_v2_to_v3.py
+
 .PHONY: clean
 clean: ## Clean temporary files
 	rm -rf tests/output
 	find tests -iname '*.xml' -exec rm "{}" \;
 	find -iname '*.pyc' -exec rm "{}" \;
+	rm -f scripts/test_output.yaml
