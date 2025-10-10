@@ -26,40 +26,48 @@ class VaultSimpleIntegrationTest(unittest.TestCase):
         print("Starting Vault container...")
 
         # Clean up any existing container with the same name
-        subprocess.run(
-            ["podman", "stop", "vault-test"],
-            capture_output=True,
-            text=True
-        )
-        subprocess.run(
-            ["podman", "rm", "vault-test"],
-            capture_output=True,
-            text=True
-        )
+        subprocess.run(["podman", "stop", "vault-test"], capture_output=True, text=True)
+        subprocess.run(["podman", "rm", "vault-test"], capture_output=True, text=True)
 
         # Create a volume for vault data (if it doesn't exist)
         subprocess.run(
-            ["podman", "volume", "create", "vault-data"],
-            capture_output=True,
-            text=True
+            ["podman", "volume", "create", "vault-data"], capture_output=True, text=True
         )
         # Ignore errors if volume already exists
 
         # Start the vault container
-        result = subprocess.run([
-            "podman", "run", "-d",
-            "--name", "vault-test",
-            "--rm",  # Auto-remove when stopped
-            "-p", "8200:8200",
-            "-e", "VAULT_DEV_ROOT_TOKEN_ID=myroot",
-            "-e", "VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200",
-            "-e", "VAULT_ADDR=http://0.0.0.0:8200",
-            "--cap-add", "IPC_LOCK",
-            "-v", "vault-data:/vault/data",
-            "-v", f"{cls.test_dir}/vault-config:/vault/config",
-            "docker.io/hashicorp/vault:1.15.2",
-            "vault", "server", "-dev", "-dev-root-token-id=myroot", "-dev-listen-address=0.0.0.0:8200"
-        ], capture_output=True, text=True)
+        result = subprocess.run(
+            [
+                "podman",
+                "run",
+                "-d",
+                "--name",
+                "vault-test",
+                "--rm",  # Auto-remove when stopped
+                "-p",
+                "8200:8200",
+                "-e",
+                "VAULT_DEV_ROOT_TOKEN_ID=myroot",
+                "-e",
+                "VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200",
+                "-e",
+                "VAULT_ADDR=http://0.0.0.0:8200",
+                "--cap-add",
+                "IPC_LOCK",
+                "-v",
+                "vault-data:/vault/data",
+                "-v",
+                f"{cls.test_dir}/vault-config:/vault/config",
+                "docker.io/hashicorp/vault:1.15.2",
+                "vault",
+                "server",
+                "-dev",
+                "-dev-root-token-id=myroot",
+                "-dev-listen-address=0.0.0.0:8200",
+            ],
+            capture_output=True,
+            text=True,
+        )
 
         if result.returncode != 0:
             raise Exception(f"Failed to start Vault container: {result.stderr}")
@@ -73,17 +81,11 @@ class VaultSimpleIntegrationTest(unittest.TestCase):
         print("Stopping Vault container...")
 
         # Stop and remove the container (--rm flag will auto-remove it)
-        subprocess.run(
-            ["podman", "stop", "vault-test"],
-            capture_output=True,
-            text=True
-        )
+        subprocess.run(["podman", "stop", "vault-test"], capture_output=True, text=True)
 
         # Clean up the volume
         subprocess.run(
-            ["podman", "volume", "rm", "vault-data"],
-            capture_output=True,
-            text=True
+            ["podman", "volume", "rm", "vault-data"], capture_output=True, text=True
         )
 
     @classmethod
@@ -139,7 +141,9 @@ class VaultSimpleIntegrationTest(unittest.TestCase):
         """Test basic KV store functionality"""
         # Store a test secret
         test_data = {"test_key": "test_value", "number": "42"}
-        response = self._vault_request("PUT", "secret/data/test/simple", {"data": test_data})
+        response = self._vault_request(
+            "PUT", "secret/data/test/simple", {"data": test_data}
+        )
         self.assertIn(response.status_code, [200, 204])
 
         # Retrieve the secret
@@ -154,12 +158,16 @@ class VaultSimpleIntegrationTest(unittest.TestCase):
         """Test that we can create secrets in different paths"""
         # Test hub path
         hub_data = {"username": "hub-user", "password": "hub-pass"}
-        response = self._vault_request("PUT", "secret/data/hub/test-secret", {"data": hub_data})
+        response = self._vault_request(
+            "PUT", "secret/data/hub/test-secret", {"data": hub_data}
+        )
         self.assertIn(response.status_code, [200, 204])
 
         # Test spoke path
         spoke_data = {"username": "spoke-user", "password": "spoke-pass"}
-        response = self._vault_request("PUT", "secret/data/test-spoke/test-secret", {"data": spoke_data})
+        response = self._vault_request(
+            "PUT", "secret/data/test-spoke/test-secret", {"data": spoke_data}
+        )
         self.assertIn(response.status_code, [200, 204])
 
         # Verify we can retrieve from both paths

@@ -29,9 +29,11 @@ class VaultErrorIntegrationTest(unittest.TestCase):
 
         # Start Vault container using helper script
         print("Starting Vault container...")
-        result = subprocess.run([
-            str(cls.test_dir / "vault-helper.sh"), "start"
-        ], capture_output=True, text=True)
+        result = subprocess.run(
+            [str(cls.test_dir / "vault-helper.sh"), "start"],
+            capture_output=True,
+            text=True,
+        )
 
         if result.returncode != 0:
             raise Exception(f"Failed to start Vault: {result.stderr}")
@@ -42,9 +44,11 @@ class VaultErrorIntegrationTest(unittest.TestCase):
     def tearDownClass(cls):
         """Clean up Vault container"""
         print("Stopping Vault container...")
-        result = subprocess.run([
-            str(cls.test_dir / "vault-helper.sh"), "stop"
-        ], capture_output=True, text=True)
+        result = subprocess.run(
+            [str(cls.test_dir / "vault-helper.sh"), "stop"],
+            capture_output=True,
+            text=True,
+        )
         print("Vault stopped")
 
     def _vault_request(self, method, path, data=None):
@@ -95,8 +99,8 @@ secrets:
 
         # Create a playbook that should handle missing files gracefully
         # First create the test values file separately
-        test_values_file = '/tmp/test-error-values.yaml'
-        with open(test_values_file, 'w') as f:
+        test_values_file = "/tmp/test-error-values.yaml"
+        with open(test_values_file, "w") as f:
             f.write(test_values_content)
 
         playbook_content = f"""---
@@ -118,20 +122,24 @@ secrets:
 """
 
         # Write playbook to temp file
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.yml', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as f:
             f.write(playbook_content)
             playbook_file = f.name
 
         try:
             # Set environment for vault direct mode
             env = os.environ.copy()
-            env['VAULT_DIRECT_MODE'] = 'true'
-            env['ANSIBLE_COLLECTIONS_PATH'] = str(self.collection_root.parent.parent)
+            env["VAULT_DIRECT_MODE"] = "true"
+            env["ANSIBLE_COLLECTIONS_PATH"] = str(self.collection_root.parent.parent)
 
             # Run the playbook
-            result = subprocess.run([
-                'ansible-playbook', '-v', playbook_file
-            ], cwd=self.collection_root, capture_output=True, text=True, env=env)
+            result = subprocess.run(
+                ["ansible-playbook", "-v", playbook_file],
+                cwd=self.collection_root,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
 
             print("Ansible playbook output:")
             print("STDOUT:", result.stdout)
@@ -139,13 +147,17 @@ secrets:
             print("Return code:", result.returncode)
 
             # The playbook should succeed because we're using ignore_errors
-            self.assertEqual(result.returncode, 0, "Expected playbook to succeed with ignore_errors")
+            self.assertEqual(
+                result.returncode, 0, "Expected playbook to succeed with ignore_errors"
+            )
 
             # Check that the error message contains information about the missing files
             output = result.stdout + result.stderr
             # Check that the module failed but the task still shows the error
             self.assertIn("failed", output.lower(), "Expected failed status in output")
-            self.assertIn("missing_file", output.lower(), "Expected error about missing file")
+            self.assertIn(
+                "missing_file", output.lower(), "Expected error about missing file"
+            )
 
             # Verify that the working secret was still created
             self._verify_partial_secrets_created()
@@ -161,21 +173,29 @@ secrets:
 
         # Check that the working secret was created successfully
         try:
-            working_response = self._vault_request("GET", "secret/data/hub/working-secret")
+            working_response = self._vault_request(
+                "GET", "secret/data/hub/working-secret"
+            )
             if working_response.status_code == 200:
                 working_data = working_response.json()["data"]["data"]
                 self.assertEqual(working_data["username"], "working-user")
-                self.assertEqual(working_data["endpoint"], "https://working.example.com")
+                self.assertEqual(
+                    working_data["endpoint"], "https://working.example.com"
+                )
                 self.assertIn("password", working_data)
                 print("✅ Working secret was created successfully")
             else:
-                print(f"⚠️ Working secret not found (status: {working_response.status_code})")
+                print(
+                    f"⚠️ Working secret not found (status: {working_response.status_code})"
+                )
         except Exception as e:
             print(f"⚠️ Could not verify working secret: {e}")
 
         # Check the failing secret - it should either not exist or have partial data
         try:
-            failing_response = self._vault_request("GET", "secret/data/hub/failing-secret")
+            failing_response = self._vault_request(
+                "GET", "secret/data/hub/failing-secret"
+            )
             if failing_response.status_code == 200:
                 failing_data = failing_response.json()["data"]["data"]
                 # Should have valid fields but not the missing file
@@ -186,7 +206,9 @@ secrets:
                 self.assertNotIn("missing_file", failing_data)
                 print("✅ Failing secret has partial data (valid fields only)")
             else:
-                print(f"ℹ️ Failing secret not found (status: {failing_response.status_code}) - this is expected")
+                print(
+                    f"ℹ️ Failing secret not found (status: {failing_response.status_code}) - this is expected"
+                )
         except Exception as e:
             print(f"ℹ️ Could not check failing secret: {e} - this may be expected")
 

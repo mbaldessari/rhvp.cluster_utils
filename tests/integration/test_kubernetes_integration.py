@@ -28,9 +28,11 @@ class KubernetesIntegrationTest(unittest.TestCase):
 
         # Start kind cluster using helper script
         print("Starting kind cluster...")
-        result = subprocess.run([
-            str(cls.test_dir / "kind-helper.sh"), "start"
-        ], capture_output=True, text=True)
+        result = subprocess.run(
+            [str(cls.test_dir / "kind-helper.sh"), "start"],
+            capture_output=True,
+            text=True,
+        )
 
         if result.returncode != 0:
             raise Exception(f"Failed to start kind cluster: {result.stderr}")
@@ -42,9 +44,11 @@ class KubernetesIntegrationTest(unittest.TestCase):
     def tearDownClass(cls):
         """Clean up kind cluster"""
         print("Stopping kind cluster...")
-        result = subprocess.run([
-            str(cls.test_dir / "kind-helper.sh"), "stop"
-        ], capture_output=True, text=True)
+        result = subprocess.run(
+            [str(cls.test_dir / "kind-helper.sh"), "stop"],
+            capture_output=True,
+            text=True,
+        )
         print("Kind cluster stopped")
 
     @classmethod
@@ -54,10 +58,18 @@ class KubernetesIntegrationTest(unittest.TestCase):
         start_time = time.time()
         while time.time() - start_time < timeout:
             try:
-                result = subprocess.run([
-                    "kubectl", "--kubeconfig", str(cls.kubeconfig_file),
-                    "get", "nodes"
-                ], capture_output=True, text=True, timeout=10)
+                result = subprocess.run(
+                    [
+                        "kubectl",
+                        "--kubeconfig",
+                        str(cls.kubeconfig_file),
+                        "get",
+                        "nodes",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                )
 
                 if result.returncode == 0 and "Ready" in result.stdout:
                     print("Cluster is ready!")
@@ -75,7 +87,9 @@ class KubernetesIntegrationTest(unittest.TestCase):
 
     def _get_secret(self, name, namespace="default"):
         """Get a Kubernetes secret"""
-        result = self._kubectl_command("get", "secret", name, "-n", namespace, "-o", "json")
+        result = self._kubectl_command(
+            "get", "secret", name, "-n", namespace, "-o", "json"
+        )
         if result.returncode == 0:
             return json.loads(result.stdout)
         return None
@@ -84,7 +98,7 @@ class KubernetesIntegrationTest(unittest.TestCase):
         """Decode base64 secret data"""
         decoded = {}
         for key, value in secret_data.items():
-            decoded[key] = base64.b64decode(value).decode('utf-8')
+            decoded[key] = base64.b64decode(value).decode("utf-8")
         return decoded
 
     def test_kubernetes_secretstore_integration(self):
@@ -133,8 +147,8 @@ secrets:
 """
 
         # Create the test values file separately
-        test_values_file = '/tmp/test-k8s-values.yaml'
-        with open(test_values_file, 'w') as f:
+        test_values_file = "/tmp/test-k8s-values.yaml"
+        with open(test_values_file, "w") as f:
             f.write(test_values_content)
 
         # Create a playbook to test Kubernetes secretstore
@@ -158,20 +172,24 @@ secrets:
 """
 
         # Write playbook to temp file
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.yml', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as f:
             f.write(playbook_content)
             playbook_file = f.name
 
         try:
             # Set environment for kubernetes mode
             env = os.environ.copy()
-            env['ANSIBLE_COLLECTIONS_PATH'] = str(self.collection_root.parent.parent)
-            env['KUBECONFIG'] = str(self.kubeconfig_file)
+            env["ANSIBLE_COLLECTIONS_PATH"] = str(self.collection_root.parent.parent)
+            env["KUBECONFIG"] = str(self.kubeconfig_file)
 
             # Run the playbook
-            result = subprocess.run([
-                'ansible-playbook', '-v', playbook_file
-            ], cwd=self.collection_root, capture_output=True, text=True, env=env)
+            result = subprocess.run(
+                ["ansible-playbook", "-v", playbook_file],
+                cwd=self.collection_root,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
 
             print("Ansible playbook output:")
             print("STDOUT:", result.stdout)
@@ -179,7 +197,9 @@ secrets:
             print("Return code:", result.returncode)
 
             # The playbook should succeed
-            self.assertEqual(result.returncode, 0, f"Ansible playbook failed: {result.stderr}")
+            self.assertEqual(
+                result.returncode, 0, f"Ansible playbook failed: {result.stderr}"
+            )
             self.assertIn("secrets injected", result.stdout.lower())
 
         finally:
@@ -197,7 +217,9 @@ secrets:
         # Test database credentials in default namespace
         print("Checking database-credentials in default namespace...")
         secret = self._get_secret("database-credentials", "default")
-        self.assertIsNotNone(secret, "database-credentials secret not found in default namespace")
+        self.assertIsNotNone(
+            secret, "database-credentials secret not found in default namespace"
+        )
 
         # Verify metadata
         metadata = secret["metadata"]
@@ -209,7 +231,9 @@ secrets:
         self.assertEqual(metadata["labels"]["app"], "myapp")
         self.assertEqual(metadata["labels"]["component"], "database")
         self.assertEqual(metadata["annotations"]["created-by"], "validated-patterns")
-        self.assertEqual(metadata["annotations"]["description"], "Database credentials for myapp")
+        self.assertEqual(
+            metadata["annotations"]["description"], "Database credentials for myapp"
+        )
 
         # Verify secret data
         decoded_data = self._decode_secret_data(secret["data"])
@@ -222,14 +246,18 @@ secrets:
         # Test database credentials in test-namespace
         print("Checking database-credentials in test-namespace...")
         secret = self._get_secret("database-credentials", "test-namespace")
-        self.assertIsNotNone(secret, "database-credentials secret not found in test-namespace")
+        self.assertIsNotNone(
+            secret, "database-credentials secret not found in test-namespace"
+        )
         decoded_data = self._decode_secret_data(secret["data"])
         self.assertEqual(decoded_data["username"], "db-user")
 
         # Test API credentials in production namespace
         print("Checking api-credentials in production namespace...")
         secret = self._get_secret("api-credentials", "production")
-        self.assertIsNotNone(secret, "api-credentials secret not found in production namespace")
+        self.assertIsNotNone(
+            secret, "api-credentials secret not found in production namespace"
+        )
 
         # Verify type and data
         self.assertEqual(secret["type"], "kubernetes.io/basic-auth")
@@ -241,20 +269,26 @@ secrets:
         # Test static config in default namespace (uses settings.namespace)
         print("Checking static-config in test-secrets namespace...")
         secret = self._get_secret("static-config", "test-secrets")
-        self.assertIsNotNone(secret, "static-config secret not found in test-secrets namespace")
+        self.assertIsNotNone(
+            secret, "static-config secret not found in test-secrets namespace"
+        )
 
         decoded_data = self._decode_secret_data(secret["data"])
         self.assertEqual(decoded_data["config_value"], "test-config")
         self.assertEqual(decoded_data["environment"], "testing")
         self.assertEqual(decoded_data["debug"], "True")  # Booleans become strings
-        self.assertEqual(decoded_data["max_connections"], "100")  # Numbers become strings
+        self.assertEqual(
+            decoded_data["max_connections"], "100"
+        )  # Numbers become strings
 
         print("✅ All Kubernetes secrets verified successfully!")
 
     def test_kubernetes_cluster_connection(self):
         """Simple test to verify cluster connection works"""
         result = self._kubectl_command("get", "nodes")
-        self.assertEqual(result.returncode, 0, f"Failed to connect to cluster: {result.stderr}")
+        self.assertEqual(
+            result.returncode, 0, f"Failed to connect to cluster: {result.stderr}"
+        )
         self.assertIn("Ready", result.stdout, "No ready nodes found")
 
     def test_kubernetes_namespaces(self):
@@ -275,7 +309,9 @@ if __name__ == "__main__":
         sys.exit(0)
 
     try:
-        subprocess.run(["kubectl", "version", "--client"], capture_output=True, check=True)
+        subprocess.run(
+            ["kubectl", "version", "--client"], capture_output=True, check=True
+        )
     except (subprocess.CalledProcessError, FileNotFoundError):
         print("kubectl is not available. Skipping Kubernetes integration tests.")
         print("Install kubectl: https://kubernetes.io/docs/tasks/tools/")

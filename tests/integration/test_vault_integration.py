@@ -31,40 +31,48 @@ class VaultIntegrationTest(unittest.TestCase):
         print("Starting Vault container...")
 
         # Clean up any existing container with the same name
-        subprocess.run(
-            ["podman", "stop", "vault-test"],
-            capture_output=True,
-            text=True
-        )
-        subprocess.run(
-            ["podman", "rm", "vault-test"],
-            capture_output=True,
-            text=True
-        )
+        subprocess.run(["podman", "stop", "vault-test"], capture_output=True, text=True)
+        subprocess.run(["podman", "rm", "vault-test"], capture_output=True, text=True)
 
         # Create a volume for vault data (if it doesn't exist)
         subprocess.run(
-            ["podman", "volume", "create", "vault-data"],
-            capture_output=True,
-            text=True
+            ["podman", "volume", "create", "vault-data"], capture_output=True, text=True
         )
         # Ignore errors if volume already exists
 
         # Start the vault container
-        result = subprocess.run([
-            "podman", "run", "-d",
-            "--name", "vault-test",
-            "--rm",  # Auto-remove when stopped
-            "-p", "8200:8200",
-            "-e", "VAULT_DEV_ROOT_TOKEN_ID=myroot",
-            "-e", "VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200",
-            "-e", "VAULT_ADDR=http://0.0.0.0:8200",
-            "--cap-add", "IPC_LOCK",
-            "-v", "vault-data:/vault/data",
-            "-v", f"{cls.test_dir}/vault-config:/vault/config",
-            "docker.io/hashicorp/vault:1.15.2",
-            "vault", "server", "-dev", "-dev-root-token-id=myroot", "-dev-listen-address=0.0.0.0:8200"
-        ], capture_output=True, text=True)
+        result = subprocess.run(
+            [
+                "podman",
+                "run",
+                "-d",
+                "--name",
+                "vault-test",
+                "--rm",  # Auto-remove when stopped
+                "-p",
+                "8200:8200",
+                "-e",
+                "VAULT_DEV_ROOT_TOKEN_ID=myroot",
+                "-e",
+                "VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200",
+                "-e",
+                "VAULT_ADDR=http://0.0.0.0:8200",
+                "--cap-add",
+                "IPC_LOCK",
+                "-v",
+                "vault-data:/vault/data",
+                "-v",
+                f"{cls.test_dir}/vault-config:/vault/config",
+                "docker.io/hashicorp/vault:1.15.2",
+                "vault",
+                "server",
+                "-dev",
+                "-dev-root-token-id=myroot",
+                "-dev-listen-address=0.0.0.0:8200",
+            ],
+            capture_output=True,
+            text=True,
+        )
 
         if result.returncode != 0:
             raise Exception(f"Failed to start Vault container: {result.stderr}")
@@ -81,17 +89,11 @@ class VaultIntegrationTest(unittest.TestCase):
         print("Stopping Vault container...")
 
         # Stop and remove the container (--rm flag will auto-remove it)
-        subprocess.run(
-            ["podman", "stop", "vault-test"],
-            capture_output=True,
-            text=True
-        )
+        subprocess.run(["podman", "stop", "vault-test"], capture_output=True, text=True)
 
         # Clean up the volume
         subprocess.run(
-            ["podman", "volume", "rm", "vault-data"],
-            capture_output=True,
-            text=True
+            ["podman", "volume", "rm", "vault-data"], capture_output=True, text=True
         )
 
     @classmethod
@@ -102,7 +104,12 @@ class VaultIntegrationTest(unittest.TestCase):
         while time.time() - start_time < timeout:
             try:
                 response = requests.get(f"{cls.vault_addr}/v1/sys/health", timeout=5)
-                if response.status_code in [200, 429, 472, 473]:  # Vault health check responses
+                if response.status_code in [
+                    200,
+                    429,
+                    472,
+                    473,
+                ]:  # Vault health check responses
                     print("Vault is ready!")
                     return
             except requests.RequestException:
@@ -119,11 +126,8 @@ class VaultIntegrationTest(unittest.TestCase):
         try:
             response = requests.post(
                 f"{cls.vault_addr}/v1/sys/mounts/secret",
-                json={
-                    "type": "kv",
-                    "options": {"version": "2"}
-                },
-                headers=headers
+                json={"type": "kv", "options": {"version": "2"}},
+                headers=headers,
             )
             # 400 error is OK if it already exists
             if response.status_code not in [200, 204, 400]:
@@ -179,27 +183,25 @@ class VaultIntegrationTest(unittest.TestCase):
         var: result
 """
 
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.yml', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as f:
             f.write(playbook_content)
             playbook_file = f.name
 
         try:
             # Run ansible-playbook
-            result = subprocess.run([
-                "ansible-playbook",
-                playbook_file,
-                "-v"
-            ],
-            cwd=self.collection_root,
-            capture_output=True,
-            text=True,
-            env={
-                **os.environ,
-                "ANSIBLE_COLLECTIONS_PATH": str(self.collection_root.parent.parent),
-                "VAULT_ADDR": self.vault_addr,
-                "VAULT_TOKEN": self.vault_token,
-                "VAULT_DIRECT_MODE": "true"
-            })
+            result = subprocess.run(
+                ["ansible-playbook", playbook_file, "-v"],
+                cwd=self.collection_root,
+                capture_output=True,
+                text=True,
+                env={
+                    **os.environ,
+                    "ANSIBLE_COLLECTIONS_PATH": str(self.collection_root.parent.parent),
+                    "VAULT_ADDR": self.vault_addr,
+                    "VAULT_TOKEN": self.vault_token,
+                    "VAULT_DIRECT_MODE": "true",
+                },
+            )
 
             print("Ansible playbook output:")
             print("STDOUT:", result.stdout)
@@ -207,7 +209,9 @@ class VaultIntegrationTest(unittest.TestCase):
             print("Return code:", result.returncode)
 
             # Check if playbook succeeded
-            self.assertEqual(result.returncode, 0, f"Ansible playbook failed: {result.stderr}")
+            self.assertEqual(
+                result.returncode, 0, f"Ansible playbook failed: {result.stderr}"
+            )
             self.assertIn("secrets injected", result.stdout)
 
         finally:
@@ -227,7 +231,9 @@ class VaultIntegrationTest(unittest.TestCase):
         self.assertIn("test-strong", policy_names)
 
         # Test secrets in hub path
-        hub_database_response = self._vault_request("GET", "secret/data/hub/integration-test-database")
+        hub_database_response = self._vault_request(
+            "GET", "secret/data/hub/integration-test-database"
+        )
         self.assertEqual(hub_database_response.status_code, 200)
         hub_db_data = hub_database_response.json()["data"]["data"]
 
@@ -240,7 +246,9 @@ class VaultIntegrationTest(unittest.TestCase):
         self.assertEqual(len(hub_db_data["password"]), 8)
 
         # Test secrets in test-spoke path
-        spoke_database_response = self._vault_request("GET", "secret/data/test-spoke/integration-test-database")
+        spoke_database_response = self._vault_request(
+            "GET", "secret/data/test-spoke/integration-test-database"
+        )
         self.assertEqual(spoke_database_response.status_code, 200)
         spoke_db_data = spoke_database_response.json()["data"]["data"]
 
@@ -254,7 +262,9 @@ class VaultIntegrationTest(unittest.TestCase):
         self.assertNotEqual(hub_db_data["password"], spoke_db_data["password"])
 
         # Test API secret (should only be in hub due to targets override)
-        hub_api_response = self._vault_request("GET", "secret/data/hub/integration-test-api")
+        hub_api_response = self._vault_request(
+            "GET", "secret/data/hub/integration-test-api"
+        )
         self.assertEqual(hub_api_response.status_code, 200)
         hub_api_data = hub_api_response.json()["data"]["data"]
 
@@ -265,17 +275,25 @@ class VaultIntegrationTest(unittest.TestCase):
         self.assertEqual(len(hub_api_data["token"]), 16)
 
         # API secret should NOT be in test-spoke (due to targets override)
-        spoke_api_response = self._vault_request("GET", "secret/data/test-spoke/integration-test-api")
+        spoke_api_response = self._vault_request(
+            "GET", "secret/data/test-spoke/integration-test-api"
+        )
         self.assertEqual(spoke_api_response.status_code, 404)
 
         # Test static values secret
-        hub_static_response = self._vault_request("GET", "secret/data/hub/integration-test-static")
+        hub_static_response = self._vault_request(
+            "GET", "secret/data/hub/integration-test-static"
+        )
         self.assertEqual(hub_static_response.status_code, 200)
         hub_static_data = hub_static_response.json()["data"]["data"]
 
         self.assertEqual(hub_static_data["static_value"], "this-is-a-test-value")
-        self.assertEqual(hub_static_data["number_value"], "42")  # Numbers become strings in vault
-        self.assertEqual(hub_static_data["boolean_value"], "True")  # Booleans become strings
+        self.assertEqual(
+            hub_static_data["number_value"], "42"
+        )  # Numbers become strings in vault
+        self.assertEqual(
+            hub_static_data["boolean_value"], "True"
+        )  # Booleans become strings
 
     def test_vault_connection(self):
         """Simple test to verify Vault connection works"""
