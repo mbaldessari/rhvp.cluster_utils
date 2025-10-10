@@ -644,6 +644,8 @@ class LoadSecretsV3(SecretsV3Base):
         super().__init__(module, syaml)
         self.namespace = namespace
         self.pod = pod
+        # Check for direct vault mode (for integration testing)
+        self.direct_mode = os.environ.get('VAULT_DIRECT_MODE', '').lower() == 'true'
 
     def _run_command(self, command, attempts=1, sleep=3, checkrc=True):
         """
@@ -674,13 +676,26 @@ class LoadSecretsV3(SecretsV3Base):
     def inject_vault_policies(self):
         """Inject vault policies for password generation"""
         for name, policy in self._get_vault_policies().items():
-            cmd = (
-                f"echo '{policy}' | oc exec -n {self.namespace} {self.pod} -i -- sh -c "
-                f"'cat - > /tmp/{name}.hcl';"
-                f"oc exec -n {self.namespace} {self.pod} -i -- sh -c 'vault write sys/policies/password/{name} "
-                f" policy=@/tmp/{name}.hcl'"
-            )
-            self._run_command(cmd, attempts=3)
+            if self.direct_mode:
+                # Direct mode: use podman exec to run commands in vault container
+                vault_addr = os.environ.get('VAULT_ADDR', 'http://localhost:8200')
+                vault_token = os.environ.get('VAULT_TOKEN', 'myroot')
+                cmd = (
+                    f"echo '{policy}' | podman exec -i vault-test sh -c "
+                    f"'cat - > /tmp/{name}.hcl';"
+                    f"podman exec vault-test sh -c 'VAULT_ADDR={vault_addr} VAULT_TOKEN={vault_token} vault write sys/policies/password/{name} "
+                    f" policy=@/tmp/{name}.hcl'"
+                )
+                self._run_command(cmd, attempts=3)
+            else:
+                # OpenShift mode: use oc exec
+                cmd = (
+                    f"echo '{policy}' | oc exec -n {self.namespace} {self.pod} -i -- sh -c "
+                    f"'cat - > /tmp/{name}.hcl';"
+                    f"oc exec -n {self.namespace} {self.pod} -i -- sh -c 'vault write sys/policies/password/{name} "
+                    f" policy=@/tmp/{name}.hcl'"
+                )
+                self._run_command(cmd, attempts=3)
 
     def _inject_secret(self, secret_name, secret_config, mount="secret"):
         """Inject a single secret into vault"""
@@ -724,10 +739,17 @@ class LoadSecretsV3(SecretsV3Base):
         )
 
         for target in targets:
-            cmd = (
-                f"oc exec -n {self.namespace} {self.pod} -i -- sh -c "
-                f'"{gen_cmd} | vault kv {verb} -mount={mount} {target}/{secret_name} {field_name}=-"'
-            )
+            if self.direct_mode:
+                # Direct mode: use podman exec to run commands in vault container
+                vault_addr = os.environ.get('VAULT_ADDR', 'http://localhost:8200')
+                vault_token = os.environ.get('VAULT_TOKEN', 'myroot')
+                cmd = f'podman exec vault-test sh -c "VAULT_ADDR={vault_addr} VAULT_TOKEN={vault_token} {gen_cmd} | VAULT_ADDR={vault_addr} VAULT_TOKEN={vault_token} vault kv {verb} -mount={mount} {target}/{secret_name} {field_name}=-"'
+            else:
+                # OpenShift mode: use oc exec
+                cmd = (
+                    f"oc exec -n {self.namespace} {self.pod} -i -- sh -c "
+                    f'"{gen_cmd} | vault kv {verb} -mount={mount} {target}/{secret_name} {field_name}=-"'
+                )
             self._run_command(cmd, attempts=3)
 
     def _inject_static_field(
@@ -735,10 +757,17 @@ class LoadSecretsV3(SecretsV3Base):
     ):
         """Inject a static field value"""
         for target in targets:
-            cmd = (
-                f"oc exec -n {self.namespace} {self.pod} -i -- sh -c "
-                f"\"vault kv {verb} -mount={mount} {target}/{secret_name} {field_name}='{value}'\""
-            )
+            if self.direct_mode:
+                # Direct mode: use podman exec to run commands in vault container
+                vault_addr = os.environ.get('VAULT_ADDR', 'http://localhost:8200')
+                vault_token = os.environ.get('VAULT_TOKEN', 'myroot')
+                cmd = f"podman exec vault-test sh -c \"VAULT_ADDR={vault_addr} VAULT_TOKEN={vault_token} vault kv {verb} -mount={mount} {target}/{secret_name} {field_name}='{value}'\""
+            else:
+                # OpenShift mode: use oc exec
+                cmd = (
+                    f"oc exec -n {self.namespace} {self.pod} -i -- sh -c "
+                    f"\"vault kv {verb} -mount={mount} {target}/{secret_name} {field_name}='{value}'\""
+                )
             self._run_command(cmd, attempts=3)
 
     def inject_secrets(self):

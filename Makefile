@@ -45,6 +45,24 @@ ansible-unittest: ## run ansible unit tests
 .PHONY: test
 test: ansible-sanitytest ansible-unittest
 
+.PHONY: integration-test-setup
+integration-test-setup: ## Install requirements for integration tests
+	pip install -r tests/integration/requirements.txt
+
+.PHONY: integration-test
+integration-test: integration-test-setup ## Run integration tests with real Vault container
+	@echo "Running integration tests with real Vault container..."
+	cd tests/integration && python test_vault_simple.py
+
+.PHONY: integration-test-full
+integration-test-full: integration-test-setup ## Run full integration tests including Ansible playbook tests
+	@echo "Running full integration tests..."
+	cd tests/integration && python test_vault_simple.py
+	cd tests/integration && ANSIBLE_COLLECTIONS_PATH=$(shell pwd)/../.. python test_vault_integration.py
+
+.PHONY: test-all
+test-all: test integration-test ## Run all tests (unit + integration)
+
 .PHONY: check-jsonschema
 check-jsonschema: ## Runs check-jsonschema against all unit test files except known broken ones
 	set -e; \
