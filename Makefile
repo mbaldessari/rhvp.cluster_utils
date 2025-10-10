@@ -48,15 +48,17 @@ test: ansible-sanitytest ansible-unittest integration-test-all ## Run all tests 
 
 .PHONY: integration-test-kubernetes
 integration-test-kubernetes: ## Run Kubernetes secretstore integration tests with kind
+	@echo "Deleting existing kind clusters"
+	-kind delete clusters vault-secrets-test
 	@echo "Running Kubernetes secretstore integration tests..."
-	cd tests/integration && python test_kubernetes_integration.py
+	cd tests/integration && export ANSIBLE_COLLECTIONS_PATH=$(shell pwd)/../.. && python test_kubernetes_integration.py
 
 .PHONY: integration-test-vault
 integration-test-vault: ## Run full integration tests including Ansible playbook tests
 	@echo "Running full integration tests..."
-	cd tests/integration && python test_vault_simple.py
-	cd tests/integration && python test_vault_error_integration.py
-	cd tests/integration && ANSIBLE_COLLECTIONS_PATH=$(shell pwd)/../.. python test_vault_integration.py
+	cd tests/integration && export ANSIBLE_COLLECTIONS_PATH=$(shell pwd)/../.. && python test_vault_simple.py
+	cd tests/integration && export ANSIBLE_COLLECTIONS_PATH=$(shell pwd)/../.. && python test_vault_error_integration.py
+	cd tests/integration && export ANSIBLE_COLLECTIONS_PATH=$(shell pwd)/../.. && python test_vault_integration.py
 
 .PHONY: integration-test-all
 integration-test-all: integration-test-kubernetes integration-test-vault ## Run all integration tests (Vault + Kubernetes)
