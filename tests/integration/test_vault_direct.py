@@ -3,11 +3,9 @@
 Direct integration test for vault_load_secrets module with real HashiCorp Vault
 """
 
-import json
 import os
 import subprocess
 import sys
-import tempfile
 import time
 import unittest
 from pathlib import Path
@@ -15,7 +13,6 @@ from unittest import mock
 
 import requests
 import yaml
-
 
 # Add the collection to the Python path for importing
 collection_root = Path(__file__).parent.parent.parent

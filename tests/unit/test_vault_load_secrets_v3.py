@@ -21,10 +21,10 @@ import base64
 import json
 import os
 import unittest
-import yaml
 from unittest import mock
 from unittest.mock import patch
 
+import yaml
 from ansible.module_utils import basic
 from ansible.module_utils.common.text.converters import to_bytes
 from ansible_collections.rhvp.cluster_utils.plugins.module_utils import load_secrets_v3

@@ -13,8 +13,6 @@ import time
 import unittest
 from pathlib import Path
 
-import yaml
-
 
 class KubernetesIntegrationTest(unittest.TestCase):
     """Integration test for Kubernetes secretstore using kind"""

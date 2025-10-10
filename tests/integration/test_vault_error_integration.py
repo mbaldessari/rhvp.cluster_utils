@@ -3,17 +3,14 @@
 Integration test for error handling using Ansible playbook mechanism
 """
 
-import json
 import os
 import subprocess
 import sys
 import tempfile
-import time
 import unittest
 from pathlib import Path
 
 import requests
-import yaml
 
 
 class VaultErrorIntegrationTest(unittest.TestCase):

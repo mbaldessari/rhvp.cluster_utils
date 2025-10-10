@@ -3,7 +3,6 @@
 Integration test for vault_load_secrets with real HashiCorp Vault
 """
 
-import json
 import os
 import subprocess
 import sys
@@ -13,7 +12,6 @@ import unittest
 from pathlib import Path
 
 import requests
-import yaml
 
 
 class VaultIntegrationTest(unittest.TestCase):

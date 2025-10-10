@@ -649,7 +649,7 @@ class LoadSecretsV3(SecretsV3Base):
         self.namespace = namespace
         self.pod = pod
         # Check for direct vault mode (for integration testing)
-        self.direct_mode = os.environ.get('VAULT_DIRECT_MODE', '').lower() == 'true'
+        self.direct_mode = os.environ.get("VAULT_DIRECT_MODE", "").lower() == "true"
         # Collect errors instead of failing immediately
         self.errors = []
 
@@ -687,8 +687,8 @@ class LoadSecretsV3(SecretsV3Base):
         for name, policy in self._get_vault_policies().items():
             if self.direct_mode:
                 # Direct mode: use podman exec to run commands in vault container
-                vault_addr = os.environ.get('VAULT_ADDR', 'http://localhost:8200')
-                vault_token = os.environ.get('VAULT_TOKEN', 'myroot')
+                vault_addr = os.environ.get("VAULT_ADDR", "http://localhost:8200")
+                vault_token = os.environ.get("VAULT_TOKEN", "myroot")
                 cmd = (
                     f"echo '{policy}' | podman exec -i vault-test sh -c "
                     f"'cat - > /tmp/{name}.hcl';"
@@ -750,8 +750,8 @@ class LoadSecretsV3(SecretsV3Base):
         for target in targets:
             if self.direct_mode:
                 # Direct mode: use podman exec to run commands in vault container
-                vault_addr = os.environ.get('VAULT_ADDR', 'http://localhost:8200')
-                vault_token = os.environ.get('VAULT_TOKEN', 'myroot')
+                vault_addr = os.environ.get("VAULT_ADDR", "http://localhost:8200")
+                vault_token = os.environ.get("VAULT_TOKEN", "myroot")
                 cmd = f'podman exec vault-test sh -c "VAULT_ADDR={vault_addr} VAULT_TOKEN={vault_token} {gen_cmd} | VAULT_ADDR={vault_addr} VAULT_TOKEN={vault_token} vault kv {verb} -mount={mount} {target}/{secret_name} {field_name}=-"'
             else:
                 # OpenShift mode: use oc exec
@@ -771,8 +771,8 @@ class LoadSecretsV3(SecretsV3Base):
         for target in targets:
             if self.direct_mode:
                 # Direct mode: use podman exec to run commands in vault container
-                vault_addr = os.environ.get('VAULT_ADDR', 'http://localhost:8200')
-                vault_token = os.environ.get('VAULT_TOKEN', 'myroot')
+                vault_addr = os.environ.get("VAULT_ADDR", "http://localhost:8200")
+                vault_token = os.environ.get("VAULT_TOKEN", "myroot")
                 cmd = f"podman exec vault-test sh -c \"VAULT_ADDR={vault_addr} VAULT_TOKEN={vault_token} vault kv {verb} -mount={mount} {target}/{secret_name} {field_name}='{value}'\""
             else:
                 # OpenShift mode: use oc exec
@@ -801,7 +801,9 @@ class LoadSecretsV3(SecretsV3Base):
 
         # Report any errors that occurred during processing
         if self.errors:
-            error_summary = f"Encountered {len(self.errors)} errors while processing secrets:\n"
+            error_summary = (
+                f"Encountered {len(self.errors)} errors while processing secrets:\n"
+            )
             for i, error in enumerate(self.errors, 1):
                 error_summary += f"{i}. {error}\n"
 
