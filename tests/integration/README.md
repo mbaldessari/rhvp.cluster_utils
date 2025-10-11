@@ -76,7 +76,7 @@ The AWS tests use LocalStack to simulate AWS Secrets Manager:
 - **Mode**: Development mode (no persistence)
 
 #### Kubernetes Test Configuration
-The Kubernetes tests use Kind (Kubernetes in Docker):
+The Kubernetes tests use Kind (Kubernetes in Podman):
 - **Cluster Name**: `vault-secrets-test`
 - **Tool**: `kind` command-line tool
 - **Namespaces**: Automatically creates test namespaces (test-namespace, production, test-secrets)
@@ -153,17 +153,15 @@ secrets:
 ### Container Runtime Issues
 
 ```bash
-# Check if Docker/Podman is running (Vault tests use Podman, others use Docker)
+# Check if Podman is running
 podman info
-docker info
 
 # Check if containers are running
-podman ps    # For Vault tests
-docker ps    # For AWS/K8s tests
+podman ps
 
 # View container logs
 podman logs vault-test      # Vault integration tests
-docker logs localstack-test # AWS integration tests
+podman logs localstack-test # AWS integration tests
 ```
 
 ### Service-Specific Issues
@@ -183,7 +181,7 @@ podman ps -f name=vault-test
 curl http://localhost:4566/_localstack/health
 
 # Check LocalStack container status
-docker ps -f name=localstack-test
+podman ps -f name=localstack-test
 
 # Test AWS CLI connectivity
 aws secretsmanager list-secrets --endpoint-url http://localhost:4566
@@ -222,8 +220,8 @@ These integration tests require container runtimes and may not be suitable for a
 
 ### Prerequisites by Test Suite
 - **Vault tests**: Require Podman
-- **AWS tests**: Require Docker and AWS CLI
-- **Kubernetes tests**: Require Docker, Kind, and kubectl
+- **AWS tests**: Require Podman and AWS CLI
+- **Kubernetes tests**: Require Podman, Kind, and kubectl
 
 ### CI Environment Considerations
 - Running only on specific branches or tags

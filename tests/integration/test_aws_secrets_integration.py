@@ -99,7 +99,7 @@ class TestAWSSecretsManagerIntegration(unittest.TestCase):
     def _is_localstack_running(cls):
         """Check if LocalStack container is running"""
         result = subprocess.run(
-            ["docker", "ps", "--format", "table {{.Names}}"],
+            ["podman", "ps", "--format", "table {{.Names}}"],
             capture_output=True,
             text=True,
             check=False,
@@ -117,7 +117,7 @@ class TestAWSSecretsManagerIntegration(unittest.TestCase):
 
         # Remove any existing stopped container
         subprocess.run(
-            ["docker", "rm", "-f", cls.container_name],
+            ["podman", "rm", "-f", cls.container_name],
             capture_output=True,
             text=True,
             check=False,
@@ -126,7 +126,7 @@ class TestAWSSecretsManagerIntegration(unittest.TestCase):
         # Start LocalStack container
         result = subprocess.run(
             [
-                "docker",
+                "podman",
                 "run",
                 "-d",
                 "--name",
@@ -158,13 +158,13 @@ class TestAWSSecretsManagerIntegration(unittest.TestCase):
 
         if cls._is_localstack_running():
             subprocess.run(
-                ["docker", "stop", cls.container_name],
+                ["podman", "stop", cls.container_name],
                 capture_output=True,
                 text=True,
                 check=False,
             )
             subprocess.run(
-                ["docker", "rm", cls.container_name],
+                ["podman", "rm", cls.container_name],
                 capture_output=True,
                 text=True,
                 check=False,
@@ -625,13 +625,13 @@ if __name__ == "__main__":
     # Check if LocalStack is available
     try:
         result = subprocess.run(
-            ["docker", "--version"], capture_output=True, text=True, check=False
+            ["podman", "--version"], capture_output=True, text=True, check=False
         )
         if result.returncode != 0:
-            print("Docker is not available. Skipping AWS integration tests.")
+            print("Podman is not available. Skipping AWS integration tests.")
             sys.exit(0)
     except FileNotFoundError:
-        print("Docker is not available. Skipping AWS integration tests.")
+        print("Podman is not available. Skipping AWS integration tests.")
         sys.exit(0)
 
     # Check if aws CLI is available
