@@ -526,6 +526,7 @@ secrets:
 
         # Parse the docker config JSON
         import json
+
         docker_config = json.loads(registry_data[".dockerconfigjson"])
 
         # Verify the structure
@@ -554,7 +555,13 @@ secrets:
 
     def test_kubernetes_namespaces(self):
         """Test that required namespaces exist"""
-        namespaces = ["default", "test-namespace", "production", "test-secrets", "app-namespace"]
+        namespaces = [
+            "default",
+            "test-namespace",
+            "production",
+            "test-secrets",
+            "app-namespace",
+        ]
         for namespace in namespaces:
             result = self._kubectl_command("get", "namespace", namespace)
             self.assertEqual(result.returncode, 0, f"Namespace {namespace} not found")
@@ -574,7 +581,9 @@ if __name__ == "__main__":
             ["kubectl", "version", "--client"], capture_output=True, check=True
         )
     except (subprocess.CalledProcessError, FileNotFoundError):
-        print("ERROR: kubectl is not available. Kubernetes integration tests cannot run.")
+        print(
+            "ERROR: kubectl is not available. Kubernetes integration tests cannot run."
+        )
         print("Install kubectl: https://kubernetes.io/docs/tasks/tools/")
         sys.exit(1)
 

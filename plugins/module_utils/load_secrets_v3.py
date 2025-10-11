@@ -1007,17 +1007,14 @@ class LoadSecretsV3Kubernetes(SecretsV3Base):
 
                 # Create the docker config structure
                 docker_config = {
-                    "auths": {
-                        registry_url: {
-                            "username": username,
-                            "auth": auth_data
-                        }
-                    }
+                    "auths": {registry_url: {"username": username, "auth": auth_data}}
                 }
 
                 # Only add password field if we have it
                 if "password" in secret_data:
-                    docker_config["auths"][registry_url]["password"] = secret_data["password"]
+                    docker_config["auths"][registry_url]["password"] = secret_data[
+                        "password"
+                    ]
 
                 docker_config_json = json.dumps(docker_config)
                 secret_manifest["data"][".dockerconfigjson"] = base64.b64encode(
