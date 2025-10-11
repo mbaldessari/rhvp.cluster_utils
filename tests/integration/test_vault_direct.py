@@ -168,6 +168,30 @@ class VaultDirectIntegrationTest(VaultTestBase):
         self.assertEqual(hub_static_data["number_value"], "42")
         self.assertEqual(hub_static_data["boolean_value"], "True")
 
+        # Test ini+base64 secret
+        hub_ini_response = self._vault_request(
+            "GET", "secret/data/hub/integration-test-ini-base64"
+        )
+        self.assertEqual(hub_ini_response.status_code, 200)
+
+        hub_ini_data = hub_ini_response.json()["data"]["data"]
+
+        # Verify plain ini:// value (should be plain text)
+        self.assertEqual(hub_ini_data["plain_value"], "test_api_key_12345")
+
+        # Verify ini+base64:// values (should be base64 encoded)
+        import base64
+
+        # Test auth_token value
+        encoded_auth_token = hub_ini_data["encoded_value"]
+        decoded_auth_token = base64.b64decode(encoded_auth_token).decode("utf-8")
+        self.assertEqual(decoded_auth_token, "dGVzdF9hdXRoX3Rva2VuXzY3ODkw")
+
+        # Test registry_auth with section
+        encoded_registry_auth = hub_ini_data["encoded_with_section"]
+        decoded_registry_auth = base64.b64decode(encoded_registry_auth).decode("utf-8")
+        self.assertEqual(decoded_registry_auth, "dGVzdDp0ZXN0cGFzcw==")
+
     def test_vault_connection(self):
         """Simple test to verify Vault connection works"""
         response = self._vault_request("GET", "sys/health")

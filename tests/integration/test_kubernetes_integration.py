@@ -386,6 +386,147 @@ secrets:
 
         print("✅ All Kubernetes secrets verified successfully!")
 
+    def test_kubernetes_ini_base64_secretstore_integration(self):
+        """Test loading secrets with ini+base64:// instructions into Kubernetes"""
+
+        # Copy the test ini file to a temporary location accessible by the test
+        test_config_file = "/tmp/test-config.ini"
+        with open(self.test_dir / "test-config.ini", "r") as src:
+            with open(test_config_file, "w") as dst:
+                dst.write(src.read())
+
+        # Load the test values file with ini+base64:// instructions
+        test_values_file = str(self.test_dir / "test-values-secret-v3-k8s.yaml")
+
+        # Create a playbook to test Kubernetes secretstore with ini+base64://
+        playbook_content = f"""---
+- hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Load secrets with ini+base64 into Kubernetes
+      rhvp.cluster_utils.vault_load_secrets:
+        values_secrets: "{test_values_file}"
+        namespace: "unused-for-k8s"
+        pod: "unused-for-k8s"
+      environment:
+        KUBECONFIG: "{self.kubeconfig_file}"
+      register: result
+
+    - name: Display result
+      debug:
+        var: result
+"""
+
+        # Write playbook to temp file
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as f:
+            f.write(playbook_content)
+            playbook_file = f.name
+
+        try:
+            # Set environment for kubernetes mode
+            env = os.environ.copy()
+            env["ANSIBLE_COLLECTIONS_PATH"] = str(self.collection_root.parent.parent)
+            env["KUBECONFIG"] = str(self.kubeconfig_file)
+
+            # Run the playbook
+            result = subprocess.run(
+                ["ansible-playbook", "-v", playbook_file],
+                cwd=self.collection_root,
+                capture_output=True,
+                text=True,
+                check=False,
+                env=env,
+            )
+
+            print("Ansible playbook output for ini+base64:")
+            print("STDOUT:", result.stdout)
+            print("STDERR:", result.stderr)
+            print("Return code:", result.returncode)
+
+            # The playbook should succeed
+            self.assertEqual(
+                result.returncode, 0, f"Ansible playbook failed: {result.stderr}"
+            )
+            self.assertIn("secrets injected", result.stdout.lower())
+
+        finally:
+            # Clean up temp files
+            os.unlink(playbook_file)
+            if os.path.exists(test_config_file):
+                os.unlink(test_config_file)
+
+        # Verify ini+base64 secrets were created correctly in Kubernetes
+        self._verify_ini_base64_secrets_in_kubernetes()
+
+    def _verify_ini_base64_secrets_in_kubernetes(self):
+        """Verify that ini+base64:// secrets were properly created in Kubernetes"""
+
+        # Test k8s-test-ini-base64 secret
+        print("Checking k8s-test-ini-base64 secret...")
+        secret = self._get_secret("k8s-test-ini-base64", "test-secrets")
+        self.assertIsNotNone(
+            secret, "k8s-test-ini-base64 secret not found in test-secrets namespace"
+        )
+
+        # Verify metadata and labels
+        metadata = secret["metadata"]
+        self.assertEqual(metadata["labels"]["app"], "config-test")
+        self.assertEqual(metadata["labels"]["test-type"], "ini-base64")
+
+        # Verify secret data
+        decoded_data = self._decode_secret_data(secret["data"])
+
+        # Verify plain ini:// value (should be plain text)
+        self.assertEqual(decoded_data["plain_value"], "test_api_key_12345")
+
+        # Verify ini+base64:// values (should be base64 encoded, then base64 decoded by Kubernetes)
+        # When we put base64 content into Kubernetes, it gets base64 encoded again by k8s
+        # So we need to decode what we expect to find
+        import base64
+
+        # Test auth_token value - this should be the original ini value base64 encoded by our code
+        encoded_auth_token = decoded_data["encoded_value"]
+        # Decode our base64 encoding to get original ini value
+        original_auth_token = base64.b64decode(encoded_auth_token).decode("utf-8")
+        self.assertEqual(original_auth_token, "dGVzdF9hdXRoX3Rva2VuXzY3ODkw")
+
+        # Test registry_auth with section
+        encoded_registry_auth = decoded_data["encoded_with_section"]
+        original_registry_auth = base64.b64decode(encoded_registry_auth).decode("utf-8")
+        self.assertEqual(original_registry_auth, "dGVzdDp0ZXN0cGFzcw==")
+
+        # Test database connection string
+        encoded_db_connection = decoded_data["database_connection"]
+        original_db_connection = base64.b64decode(encoded_db_connection).decode("utf-8")
+        self.assertEqual(
+            original_db_connection,
+            "postgresql://testuser:testpass@localhost:5432/testdb",
+        )
+
+        # Test k8s-test-registry secret
+        print("Checking k8s-test-registry secret...")
+        registry_secret = self._get_secret("k8s-test-registry", "test-secrets")
+        self.assertIsNotNone(
+            registry_secret,
+            "k8s-test-registry secret not found in test-secrets namespace",
+        )
+
+        # Verify type
+        self.assertEqual(registry_secret["type"], "kubernetes.io/dockerconfigjson")
+
+        # Verify registry data
+        registry_data = self._decode_secret_data(registry_secret["data"])
+        self.assertEqual(registry_data["registry_url"], "registry.example.com")
+        self.assertEqual(registry_data["username"], "testuser")  # Plain ini:// value
+
+        # Auth data should be base64 encoded
+        encoded_auth = registry_data["auth_data"]
+        original_auth = base64.b64decode(encoded_auth).decode("utf-8")
+        self.assertEqual(original_auth, "dGVzdDp0ZXN0cGFzcw==")
+
+        print("✅ All Kubernetes ini+base64:// secrets verified successfully!")
+
     def test_kubernetes_cluster_connection(self):
         """Simple test to verify cluster connection works"""
         result = self._kubectl_command("get", "nodes")

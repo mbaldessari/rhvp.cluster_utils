@@ -1077,6 +1077,278 @@ class TestVaultLoadSecretsV3(unittest.TestCase):
         self.assertEqual(param, "~/.config/app.ini:default:key")
         self.assertTrue(is_optional)
 
+        instruction = {
+            "value": "ini+base64://~/.config/app.ini:default:token",
+            "optional": True,
+        }
+        field_type, param, is_optional = secrets._parse_field_instruction(instruction)
+        self.assertEqual(field_type, "ini_base64")
+        self.assertEqual(param, "~/.config/app.ini:default:token")
+        self.assertTrue(is_optional)
+
+    def test_parse_field_instruction_ini_base64(self, getpass):
+        """Test parsing of ini+base64:// instructions"""
+        # Create a mock module and secrets instance
+        module = mock.MagicMock()
+        syaml = {"version": "3.0", "secrets": {}}
+        secrets = load_secrets_v3.SecretsV3Base(module, syaml)
+
+        # Test ini+base64:// parsing with full format
+        field_type, param, is_optional = secrets._parse_field_instruction(
+            "ini+base64://~/.docker/config.json:auths:registry.example.com:auth"
+        )
+        self.assertEqual(field_type, "ini_base64")
+        self.assertEqual(param, "~/.docker/config.json:auths:registry.example.com:auth")
+        self.assertFalse(is_optional)
+
+        # Test ini+base64:// parsing with short format
+        field_type, param, is_optional = secrets._parse_field_instruction(
+            "ini+base64://~/.aws/credentials:secret_key"
+        )
+        self.assertEqual(field_type, "ini_base64")
+        self.assertEqual(param, "~/.aws/credentials:secret_key")
+        self.assertFalse(is_optional)
+
+        # Test regular ini:// parsing still works
+        field_type, param, is_optional = secrets._parse_field_instruction(
+            "ini://~/.aws/credentials:access_key"
+        )
+        self.assertEqual(field_type, "ini")
+        self.assertEqual(param, "~/.aws/credentials:access_key")
+        self.assertFalse(is_optional)
+
+    def test_validate_field_ini_base64(self, getpass):
+        """Test validation of ini+base64:// field instructions"""
+        # Create a test ini file
+        import os
+        import tempfile
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".ini", delete=False) as f:
+            f.write(
+                "[default]\ntest_key=test_value\nauth_token=dGVzdF90b2tlbl92YWx1ZQ==\n"
+            )
+            f.write("[registry]\nauth=base64encodedauth\n")
+            ini_file_path = f.name
+
+        try:
+            # Create a mock module and secrets instance
+            module = mock.MagicMock()
+            syaml = {"version": "3.0", "secrets": {}}
+            secrets = load_secrets_v3.SecretsV3Base(module, syaml)
+
+            # Test valid ini+base64:// instruction with full format
+            instruction = f"ini+base64://{ini_file_path}:registry:auth"
+            result = secrets._validate_field(
+                "test_secret", "test_field", instruction, "vault"
+            )
+            self.assertTrue(result[0])
+            self.assertEqual(result[1], "")
+
+            # Test valid ini+base64:// instruction with short format
+            instruction = f"ini+base64://{ini_file_path}:auth_token"
+            result = secrets._validate_field(
+                "test_secret", "test_field", instruction, "vault"
+            )
+            self.assertTrue(result[0])
+            self.assertEqual(result[1], "")
+
+            # Test invalid ini+base64:// instruction (non-existent file)
+            instruction = "ini+base64:///nonexistent/file.ini:default:key"
+            result = secrets._validate_field(
+                "test_secret", "test_field", instruction, "vault"
+            )
+            self.assertFalse(result[0])
+            self.assertIn("ini file not found", result[1])
+
+            # Test invalid ini+base64:// instruction (bad format)
+            instruction = "ini+base64://invalid_format"
+            result = secrets._validate_field(
+                "test_secret", "test_field", instruction, "vault"
+            )
+            self.assertFalse(result[0])
+            self.assertIn("invalid ini specification", result[1])
+
+        finally:
+            # Clean up
+            os.unlink(ini_file_path)
+
+    def test_get_field_value_ini_base64(self, getpass):
+        """Test getting field value for ini+base64:// instructions"""
+        # Create a test ini file
+        import os
+        import tempfile
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".ini", delete=False) as f:
+            f.write("[default]\n")
+            f.write("api_key=my_secret_api_key\n")
+            f.write("encoded_token=dGVzdF90b2tlbl92YWx1ZQ==\n")
+            f.write("\n")
+            f.write("[docker_config]\n")
+            f.write("auth_token=plain_text_auth_token\n")
+            ini_file_path = f.name
+
+        try:
+            # Create a mock module and secrets instance
+            module = mock.MagicMock()
+            syaml = {"version": "3.0", "secrets": {}}
+            secrets = load_secrets_v3.SecretsV3Base(module, syaml)
+
+            # Test full format instruction
+            instruction = f"ini+base64://{ini_file_path}:default:api_key"
+            result = secrets._get_field_value("test_secret", "test_field", instruction)
+            # Should be base64 encoded version of "my_secret_api_key"
+            expected_b64 = base64.b64encode("my_secret_api_key".encode("utf-8")).decode(
+                "utf-8"
+            )
+            self.assertEqual(result, expected_b64)
+
+            # Verify it decodes correctly
+            decoded = base64.b64decode(result).decode("utf-8")
+            self.assertEqual(decoded, "my_secret_api_key")
+
+            # Test short format instruction
+            instruction = f"ini+base64://{ini_file_path}:encoded_token"
+            result = secrets._get_field_value("test_secret", "test_field", instruction)
+            # Should be base64 encoded version of "dGVzdF90b2tlbl92YWx1ZQ=="
+            expected_b64 = base64.b64encode(
+                "dGVzdF90b2tlbl92YWx1ZQ==".encode("utf-8")
+            ).decode("utf-8")
+            self.assertEqual(result, expected_b64)
+
+            # Test custom section
+            instruction = f"ini+base64://{ini_file_path}:docker_config:auth_token"
+            result = secrets._get_field_value("test_secret", "test_field", instruction)
+            expected_b64 = base64.b64encode(
+                "plain_text_auth_token".encode("utf-8")
+            ).decode("utf-8")
+            self.assertEqual(result, expected_b64)
+
+            # Verify it decodes correctly
+            decoded = base64.b64decode(result).decode("utf-8")
+            self.assertEqual(decoded, "plain_text_auth_token")
+
+        finally:
+            # Clean up
+            os.unlink(ini_file_path)
+
+    def test_ini_base64_vs_ini_behavior(self, getpass):
+        """Test that ini+base64:// properly base64 encodes while ini:// doesn't"""
+        # Create a test ini file
+        import os
+        import tempfile
+
+        test_value = "test_secret_value_123"
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".ini", delete=False) as f:
+            f.write(f"[default]\ntest_key={test_value}\n")
+            ini_file_path = f.name
+
+        try:
+            # Create a mock module and secrets instance
+            module = mock.MagicMock()
+            syaml = {"version": "3.0", "secrets": {}}
+            secrets = load_secrets_v3.SecretsV3Base(module, syaml)
+
+            # Get value from regular ini:// instruction
+            ini_instruction = f"ini://{ini_file_path}:test_key"
+            ini_value = secrets._get_field_value(
+                "test_secret", "test_field", ini_instruction
+            )
+
+            # Get value from ini+base64:// instruction
+            ini_base64_instruction = f"ini+base64://{ini_file_path}:test_key"
+            ini_base64_value = secrets._get_field_value(
+                "test_secret", "test_field", ini_base64_instruction
+            )
+
+            # Regular ini should return plain text
+            self.assertEqual(ini_value, test_value)
+
+            # ini+base64 should return base64 encoded version
+            expected_b64 = base64.b64encode(test_value.encode("utf-8")).decode("utf-8")
+            self.assertEqual(ini_base64_value, expected_b64)
+
+            # Values should be different
+            self.assertNotEqual(ini_value, ini_base64_value)
+
+            # Decoding the base64 value should give original
+            decoded = base64.b64decode(ini_base64_value).decode("utf-8")
+            self.assertEqual(decoded, test_value)
+            self.assertEqual(decoded, ini_value)
+
+        finally:
+            # Clean up
+            os.unlink(ini_file_path)
+
+    def test_optional_field_ini_base64_handling(self, getpass):
+        """Test optional ini+base64:// fields"""
+        # Create a mock module and secrets instance
+        module = mock.MagicMock()
+        syaml = {"version": "3.0", "secrets": {}}
+        secrets = load_secrets_v3.SecretsV3Base(module, syaml)
+
+        # Test optional ini+base64:// file that doesn't exist
+        instruction = {
+            "value": "ini+base64://nonexistent.ini:section:key",
+            "optional": True,
+        }
+        value = secrets._get_field_value("test_secret", "test_field", instruction)
+        self.assertIsNone(value)  # Should return None, not fail
+
+        # Test optional ini+base64:// key that doesn't exist in existing file
+        import os
+        import tempfile
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".ini", delete=False) as f:
+            f.write("[section1]\nkey1=value1\n")
+            ini_file_path = f.name
+
+        try:
+            instruction = {
+                "value": f"ini+base64://{ini_file_path}:section1:nonexistent_key",
+                "optional": True,
+            }
+            value = secrets._get_field_value("test_secret", "test_field", instruction)
+            self.assertIsNone(value)  # Should return None, not fail
+        finally:
+            os.unlink(ini_file_path)
+
+    def test_optional_field_ini_base64_successful_read(self, getpass):
+        """Test that optional ini+base64:// fields work normally when they succeed"""
+        # Create a test ini file
+        import os
+        import tempfile
+
+        test_value = "successful_test_value"
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".ini", delete=False) as f:
+            f.write(f"[default]\ntest_key={test_value}\n")
+            ini_file_path = f.name
+
+        try:
+            # Create a mock module and secrets instance
+            module = mock.MagicMock()
+            syaml = {"version": "3.0", "secrets": {}}
+            secrets = load_secrets_v3.SecretsV3Base(module, syaml)
+
+            # Test optional ini+base64:// that exists and succeeds
+            instruction = {
+                "value": f"ini+base64://{ini_file_path}:test_key",
+                "optional": True,
+            }
+            value = secrets._get_field_value("test_secret", "test_field", instruction)
+            self.assertIsNotNone(value)  # Should return actual base64 encoded content
+
+            # Verify it's properly base64 encoded
+            expected_b64 = base64.b64encode(test_value.encode("utf-8")).decode("utf-8")
+            self.assertEqual(value, expected_b64)
+
+            # Verify it decodes back to original value
+            decoded = base64.b64decode(value).decode("utf-8")
+            self.assertEqual(decoded, test_value)
+
+        finally:
+            # Clean up
+            os.unlink(ini_file_path)
+
     def test_parse_optional_field_validation_errors(self, getpass):
         """Test validation errors for optional field instructions"""
         # Create a mock module and secrets instance

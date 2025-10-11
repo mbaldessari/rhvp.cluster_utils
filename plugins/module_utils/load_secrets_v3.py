@@ -171,6 +171,12 @@ class SecretsV3Base:
                 actual_instruction[14:],
                 is_optional,
             )  # Remove file+base64:// prefix
+        elif actual_instruction.startswith("ini+base64://"):
+            return (
+                "ini_base64",
+                actual_instruction[13:],
+                is_optional,
+            )  # Remove ini+base64:// prefix
         elif actual_instruction.startswith("file://"):
             return "file", actual_instruction[7:], is_optional  # Remove file:// prefix
         elif actual_instruction.startswith("ini://"):
@@ -506,6 +512,30 @@ class SecretsV3Base:
                         f"Secret '{secret_name}' field '{field_name}' invalid ini specification: {e}",
                     )
                 return (True, "")
+            case "ini_base64":
+                if not param:
+                    return (
+                        False,
+                        f"Secret '{secret_name}' field '{field_name}' has empty ini specification",
+                    )
+                # Parse and validate ini specification
+                try:
+                    file_path, section, key = self._parse_ini_spec(param)
+                    # Check if file exists (skip for optional fields)
+                    if not is_optional:
+                        expanded_path = os.path.expanduser(file_path)
+                        if not os.path.isfile(expanded_path):
+                            return (
+                                False,
+                                f"Secret '{secret_name}' field '{field_name}' ini file not found: {file_path}",
+                            )
+                    return (True, "")
+                except ValueError as e:
+                    return (
+                        False,
+                        f"Secret '{secret_name}' field '{field_name}' invalid ini specification: {e}",
+                    )
+                return (True, "")
             case "generate":
                 if backing_store in ["kubernetes", "aws-secrets-manager"]:
                     return (
@@ -592,6 +622,14 @@ class SecretsV3Base:
                 try:
                     file_path, section, key = self._parse_ini_spec(param)
                     return self._read_ini_value(file_path, section, key)
+                except Exception as e:
+                    raise Exception(f"Error reading ini value {param}: {str(e)}")
+            case "ini_base64":
+                try:
+                    file_path, section, key = self._parse_ini_spec(param)
+                    value = self._read_ini_value(file_path, section, key)
+                    # Base64 encode the INI value
+                    return base64.b64encode(value.encode("utf-8")).decode("utf-8")
                 except Exception as e:
                     raise Exception(f"Error reading ini value {param}: {str(e)}")
             case "prompt":

@@ -39,6 +39,12 @@ class VaultIntegrationTest(VaultTestBase):
 
     def test_vault_load_secrets_v3_integration(self):
         """Test loading v3.0 secrets into real Vault"""
+        # Copy the test ini file to a temporary location accessible by the test
+        test_config_file = "/tmp/test-config.ini"
+        with open(self.test_dir / "test-config.ini", "r") as src:
+            with open(test_config_file, "w") as dst:
+                dst.write(src.read())
+
         # Create a temporary test values file
         test_values_file = self.test_dir / "test-values-secret-v3.yaml"
 
@@ -100,6 +106,8 @@ class VaultIntegrationTest(VaultTestBase):
 
         finally:
             os.unlink(playbook_file)
+            if os.path.exists(test_config_file):
+                os.unlink(test_config_file)
 
         # Verify secrets were stored correctly in Vault
         self._verify_secrets_in_vault()
@@ -178,6 +186,29 @@ class VaultIntegrationTest(VaultTestBase):
         self.assertEqual(
             hub_static_data["boolean_value"], "True"
         )  # Booleans become strings
+
+        # Test ini+base64 secret
+        hub_ini_response = self._vault_request(
+            "GET", "secret/data/hub/integration-test-ini-base64"
+        )
+        self.assertEqual(hub_ini_response.status_code, 200)
+        hub_ini_data = hub_ini_response.json()["data"]["data"]
+
+        # Verify plain ini:// value (should be plain text)
+        self.assertEqual(hub_ini_data["plain_value"], "test_api_key_12345")
+
+        # Verify ini+base64:// values (should be base64 encoded)
+        import base64
+
+        # Test auth_token value
+        encoded_auth_token = hub_ini_data["encoded_value"]
+        decoded_auth_token = base64.b64decode(encoded_auth_token).decode("utf-8")
+        self.assertEqual(decoded_auth_token, "dGVzdF9hdXRoX3Rva2VuXzY3ODkw")
+
+        # Test registry_auth with section
+        encoded_registry_auth = hub_ini_data["encoded_with_section"]
+        decoded_registry_auth = base64.b64decode(encoded_registry_auth).decode("utf-8")
+        self.assertEqual(decoded_registry_auth, "dGVzdDp0ZXN0cGFzcw==")
 
     def test_vault_connection(self):
         """Simple test to verify Vault connection works"""

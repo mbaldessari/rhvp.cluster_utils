@@ -539,6 +539,254 @@ class TestAWSSecretsManagerIntegration(unittest.TestCase):
             os.unlink(playbook_file)
             os.unlink(test_values_file)
 
+    def test_aws_secrets_ini_base64_integration(self):
+        """Test AWS Secrets Manager integration with ini+base64:// instructions"""
+
+        # Copy the test ini file to a temporary location accessible by the test
+        test_config_file = "/tmp/test-config.ini"
+        with open(self.test_dir / "test-config.ini", "r") as src:
+            with open(test_config_file, "w") as dst:
+                dst.write(src.read())
+
+        # Load the test values file with ini+base64:// instructions
+        test_values_file = str(self.test_dir / "test-values-secret-v3-aws.yaml")
+
+        # Create an Ansible playbook for testing
+        playbook_content = f"""---
+- hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Load secrets with ini+base64 into AWS Secrets Manager
+      rhvp.cluster_utils.vault_load_secrets:
+        values_secrets: "{test_values_file}"
+      environment:
+        AWS_ENDPOINT_URL: "http://localhost:4566"
+        AWS_ACCESS_KEY_ID: "test"
+        AWS_SECRET_ACCESS_KEY: "test"
+        AWS_DEFAULT_REGION: "us-east-1"
+        AWS_SIMULATION_MODE: "true"
+      register: result
+
+    - name: Display result
+      debug:
+        var: result
+"""
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as f:
+            f.write(playbook_content)
+            playbook_file = f.name
+
+        try:
+            # Run ansible-playbook
+            result = subprocess.run(
+                ["ansible-playbook", playbook_file, "-v"],
+                cwd=self.collection_root,
+                capture_output=True,
+                text=True,
+                check=False,
+                env={
+                    **os.environ,
+                    "ANSIBLE_COLLECTIONS_PATH": str(self.collection_root.parent.parent),
+                    **self.aws_env,
+                },
+            )
+
+            print("AWS ini+base64 integration test output:")
+            print("STDOUT:", result.stdout)
+            print("STDERR:", result.stderr)
+            print("Return code:", result.returncode)
+
+            # Check if playbook succeeded
+            self.assertEqual(
+                result.returncode, 0, f"Ansible playbook failed: {result.stderr}"
+            )
+
+            # The exact success message may vary, but we should see some indication of success
+            success_indicators = ["secrets injected", "changed", "ok="]
+            found_success = any(
+                indicator in result.stdout for indicator in success_indicators
+            )
+            self.assertTrue(
+                found_success, "No success indicators found in playbook output"
+            )
+
+        finally:
+            os.unlink(playbook_file)
+            if os.path.exists(test_config_file):
+                os.unlink(test_config_file)
+
+        # Verify ini+base64 secrets were created in LocalStack
+        self._verify_ini_base64_secrets_in_localstack()
+
+    def _verify_ini_base64_secrets_in_localstack(self):
+        """Verify that ini+base64:// secrets were properly stored in LocalStack"""
+
+        # List all secrets
+        result = subprocess.run(
+            [
+                "aws",
+                "secretsmanager",
+                "list-secrets",
+                "--endpoint-url",
+                "http://localhost:4566",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        if result.returncode != 0:
+            self.fail(f"Failed to list secrets: {result.stderr}")
+
+        secrets_list = json.loads(result.stdout)
+        secret_names = [secret["Name"] for secret in secrets_list["SecretList"]]
+
+        # Verify expected secrets exist (with prefix)
+        expected_secrets = [
+            "test-pattern/database/credentials",
+            "test-pattern/config/ini-base64-test",
+            "test-pattern/registry/auth-config",
+            "aws-test-api-keys",  # No custom secretName, so uses key name
+        ]
+
+        for expected_secret in expected_secrets:
+            found = any(expected_secret in name for name in secret_names)
+            self.assertTrue(
+                found,
+                f"Expected secret '{expected_secret}' not found in {secret_names}",
+            )
+
+        # Verify ini+base64 secret content
+        for secret_name in secret_names:
+            if "ini-base64-test" in secret_name:
+                result = subprocess.run(
+                    [
+                        "aws",
+                        "secretsmanager",
+                        "get-secret-value",
+                        "--secret-id",
+                        secret_name,
+                        "--endpoint-url",
+                        "http://localhost:4566",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+
+                if result.returncode == 0:
+                    response = json.loads(result.stdout)
+                    secret_string = response["SecretString"]
+
+                    try:
+                        secret_data = json.loads(secret_string)
+                    except json.JSONDecodeError:
+                        # LocalStack sometimes returns Python dict format
+                        import ast
+
+                        try:
+                            secret_data = ast.literal_eval(secret_string)
+                        except (ValueError, SyntaxError):
+                            print("Warning: Could not parse secret data")
+                            break
+
+                    # Verify plain ini:// value (should be plain text)
+                    self.assertIn("plain_value", secret_data)
+                    self.assertEqual(secret_data["plain_value"], "test_api_key_12345")
+
+                    # Verify ini+base64:// values (should be base64 encoded)
+                    import base64
+
+                    # Test auth_token value
+                    self.assertIn("encoded_value", secret_data)
+                    encoded_auth_token = secret_data["encoded_value"]
+                    decoded_auth_token = base64.b64decode(encoded_auth_token).decode(
+                        "utf-8"
+                    )
+                    self.assertEqual(decoded_auth_token, "dGVzdF9hdXRoX3Rva2VuXzY3ODkw")
+
+                    # Test registry_auth with section
+                    self.assertIn("encoded_with_section", secret_data)
+                    encoded_registry_auth = secret_data["encoded_with_section"]
+                    decoded_registry_auth = base64.b64decode(
+                        encoded_registry_auth
+                    ).decode("utf-8")
+                    self.assertEqual(decoded_registry_auth, "dGVzdDp0ZXN0cGFzcw==")
+
+                    # Test database connection string
+                    self.assertIn("database_connection", secret_data)
+                    encoded_db_connection = secret_data["database_connection"]
+                    decoded_db_connection = base64.b64decode(
+                        encoded_db_connection
+                    ).decode("utf-8")
+                    self.assertEqual(
+                        decoded_db_connection,
+                        "postgresql://testuser:testpass@localhost:5432/testdb",
+                    )
+
+                    # Test password from ini
+                    self.assertIn("password_from_ini", secret_data)
+                    encoded_password = secret_data["password_from_ini"]
+                    decoded_password = base64.b64decode(encoded_password).decode(
+                        "utf-8"
+                    )
+                    self.assertEqual(decoded_password, "secret_db_password")
+
+                    break
+
+        # Verify registry secret
+        for secret_name in secret_names:
+            if "registry/auth-config" in secret_name:
+                result = subprocess.run(
+                    [
+                        "aws",
+                        "secretsmanager",
+                        "get-secret-value",
+                        "--secret-id",
+                        secret_name,
+                        "--endpoint-url",
+                        "http://localhost:4566",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+
+                if result.returncode == 0:
+                    response = json.loads(result.stdout)
+                    secret_string = response["SecretString"]
+
+                    try:
+                        secret_data = json.loads(secret_string)
+                    except json.JSONDecodeError:
+                        import ast
+
+                        try:
+                            secret_data = ast.literal_eval(secret_string)
+                        except (ValueError, SyntaxError):
+                            print("Warning: Could not parse registry secret data")
+                            break
+
+                    # Verify registry data
+                    self.assertEqual(
+                        secret_data["registry_url"], "registry.example.com"
+                    )
+                    self.assertEqual(
+                        secret_data["username"], "testuser"
+                    )  # Plain ini:// value
+
+                    # Auth data should be base64 encoded
+                    import base64
+
+                    encoded_auth = secret_data["auth_data"]
+                    original_auth = base64.b64decode(encoded_auth).decode("utf-8")
+                    self.assertEqual(original_auth, "dGVzdDp0ZXN0cGFzcw==")
+
+                    break
+
+        print("✅ All AWS Secrets Manager ini+base64:// secrets verified successfully!")
+
     def _verify_secrets_in_localstack(self):
         """Verify that secrets were properly stored in LocalStack"""
 
