@@ -226,15 +226,17 @@ These integration tests require container runtimes and may not be suitable for a
 ### CI Environment Considerations
 - Running only on specific branches or tags
 - Using conditional execution based on environment variables
-- Providing alternative test commands that skip integration tests when required tools are unavailable
-- Each test suite automatically checks for required dependencies and skips if unavailable
+- Ensuring all required dependencies are installed in CI environments
+- Each test suite automatically checks for required dependencies and **fails** if unavailable
 
-### Example CI Skip Logic
+### Example CI Dependency Check
 ```python
-# Tests automatically skip if prerequisites are missing
+# Tests fail if prerequisites are missing
 try:
     subprocess.run(["podman", "--version"], capture_output=True, check=True)
 except (subprocess.CalledProcessError, FileNotFoundError):
-    print("Podman is not available. Skipping integration tests.")
-    sys.exit(0)
+    print("ERROR: Podman is not available. Integration tests cannot run.")
+    sys.exit(1)
 ```
+
+**Note**: Integration tests now fail (exit code 1) when required dependencies are missing, rather than skipping. This ensures that missing dependencies are caught as failures in CI/CD environments.

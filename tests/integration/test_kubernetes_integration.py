@@ -53,6 +53,8 @@ class KubernetesIntegrationTest(unittest.TestCase):
         """Start kind cluster using direct kind commands"""
         print("Starting kind cluster...")
 
+        my_env = os.environ.copy()
+        my_env["KIND_EXPERIMENTAL_PROVIDER"] = "podman"
         # Check if cluster already exists
         if cls._cluster_exists():
             print(f"Cluster {cls.cluster_name} already exists")
@@ -68,6 +70,7 @@ class KubernetesIntegrationTest(unittest.TestCase):
                     str(cls.kubeconfig_file),
                 ],
                 capture_output=True,
+                env=my_env,
                 text=True,
                 check=False,
             )
@@ -88,6 +91,7 @@ class KubernetesIntegrationTest(unittest.TestCase):
             ],
             capture_output=True,
             text=True,
+            env=my_env,
             check=False,
         )
 
@@ -107,6 +111,7 @@ class KubernetesIntegrationTest(unittest.TestCase):
             ],
             capture_output=True,
             text=True,
+            env=my_env,
             check=False,
         )
 
@@ -114,7 +119,7 @@ class KubernetesIntegrationTest(unittest.TestCase):
             raise Exception(f"Cluster nodes did not become ready: {result.stderr}")
 
         # Create test namespaces
-        namespaces = ["test-namespace", "production", "test-secrets"]
+        namespaces = ["test-namespace", "production", "test-secrets", "app-namespace"]
         for namespace in namespaces:
             subprocess.run(
                 [
@@ -515,15 +520,27 @@ secrets:
         # Verify type
         self.assertEqual(registry_secret["type"], "kubernetes.io/dockerconfigjson")
 
-        # Verify registry data
+        # Verify registry data - dockerconfigjson secrets should have .dockerconfigjson field
         registry_data = self._decode_secret_data(registry_secret["data"])
-        self.assertEqual(registry_data["registry_url"], "registry.example.com")
-        self.assertEqual(registry_data["username"], "testuser")  # Plain ini:// value
+        self.assertIn(".dockerconfigjson", registry_data)
 
-        # Auth data should be base64 encoded
-        encoded_auth = registry_data["auth_data"]
-        original_auth = base64.b64decode(encoded_auth).decode("utf-8")
-        self.assertEqual(original_auth, "dGVzdDp0ZXN0cGFzcw==")
+        # Parse the docker config JSON
+        import json
+        docker_config = json.loads(registry_data[".dockerconfigjson"])
+
+        # Verify the structure
+        self.assertIn("auths", docker_config)
+        self.assertIn("registry.example.com", docker_config["auths"])
+
+        # Verify the auth data
+        auth_data = docker_config["auths"]["registry.example.com"]
+        self.assertEqual(auth_data["username"], "testuser")  # Plain ini:// value
+
+        # Auth field should contain the base64 encoded credentials from ini file
+        # The auth_data field from ini+base64:// is double-base64 encoded
+        # Original ini value: dGVzdDp0ZXN0cGFzcw== (base64 "test:testpass")
+        # After ini+base64://: ZEdWemREcDBaWE4wY0dGemN3PT0= (base64 of the above)
+        self.assertEqual(auth_data["auth"], "ZEdWemREcDBaWE4wY0dGemN3PT0=")
 
         print("✅ All Kubernetes ini+base64:// secrets verified successfully!")
 
@@ -537,7 +554,7 @@ secrets:
 
     def test_kubernetes_namespaces(self):
         """Test that required namespaces exist"""
-        namespaces = ["default", "test-namespace", "production", "test-secrets"]
+        namespaces = ["default", "test-namespace", "production", "test-secrets", "app-namespace"]
         for namespace in namespaces:
             result = self._kubectl_command("get", "namespace", namespace)
             self.assertEqual(result.returncode, 0, f"Namespace {namespace} not found")
@@ -548,17 +565,17 @@ if __name__ == "__main__":
     try:
         subprocess.run(["kind", "--version"], capture_output=True, check=True)
     except (subprocess.CalledProcessError, FileNotFoundError):
-        print("kind is not available. Skipping Kubernetes integration tests.")
+        print("ERROR: kind is not available. Kubernetes integration tests cannot run.")
         print("Install kind: https://kind.sigs.k8s.io/docs/user/quick-start/")
-        sys.exit(0)
+        sys.exit(1)
 
     try:
         subprocess.run(
             ["kubectl", "version", "--client"], capture_output=True, check=True
         )
     except (subprocess.CalledProcessError, FileNotFoundError):
-        print("kubectl is not available. Skipping Kubernetes integration tests.")
+        print("ERROR: kubectl is not available. Kubernetes integration tests cannot run.")
         print("Install kubectl: https://kubernetes.io/docs/tasks/tools/")
-        sys.exit(0)
+        sys.exit(1)
 
     unittest.main(verbosity=2)

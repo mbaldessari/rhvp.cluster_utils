@@ -995,19 +995,46 @@ class LoadSecretsV3Kubernetes(SecretsV3Base):
                 "data": {},
             }
 
-            # Encode secret data
+            # Handle special case for kubernetes.io/dockerconfigjson
             import base64
+            import json
 
-            for key, value in secret_data.items():
-                if isinstance(value, str):
-                    secret_manifest["data"][key] = base64.b64encode(
-                        value.encode("utf-8")
-                    ).decode("utf-8")
-                else:
-                    # Convert non-string values to string first
-                    secret_manifest["data"][key] = base64.b64encode(
-                        str(value).encode("utf-8")
-                    ).decode("utf-8")
+            if secret_type == "kubernetes.io/dockerconfigjson":
+                # For dockerconfigjson secrets, create the required .dockerconfigjson field
+                registry_url = secret_data.get("registry_url", "registry.example.com")
+                username = secret_data.get("username", "")
+                auth_data = secret_data.get("auth_data", "")
+
+                # Create the docker config structure
+                docker_config = {
+                    "auths": {
+                        registry_url: {
+                            "username": username,
+                            "auth": auth_data
+                        }
+                    }
+                }
+
+                # Only add password field if we have it
+                if "password" in secret_data:
+                    docker_config["auths"][registry_url]["password"] = secret_data["password"]
+
+                docker_config_json = json.dumps(docker_config)
+                secret_manifest["data"][".dockerconfigjson"] = base64.b64encode(
+                    docker_config_json.encode("utf-8")
+                ).decode("utf-8")
+            else:
+                # For other secret types, encode each field separately
+                for key, value in secret_data.items():
+                    if isinstance(value, str):
+                        secret_manifest["data"][key] = base64.b64encode(
+                            value.encode("utf-8")
+                        ).decode("utf-8")
+                    else:
+                        # Convert non-string values to string first
+                        secret_manifest["data"][key] = base64.b64encode(
+                            str(value).encode("utf-8")
+                        ).decode("utf-8")
 
             # Use kubectl to create the secret
             import tempfile

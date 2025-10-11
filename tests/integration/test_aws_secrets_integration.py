@@ -876,11 +876,11 @@ if __name__ == "__main__":
             ["podman", "--version"], capture_output=True, text=True, check=False
         )
         if result.returncode != 0:
-            print("Podman is not available. Skipping AWS integration tests.")
-            sys.exit(0)
+            print("ERROR: Podman is not available. AWS integration tests cannot run.")
+            sys.exit(1)
     except FileNotFoundError:
-        print("Podman is not available. Skipping AWS integration tests.")
-        sys.exit(0)
+        print("ERROR: Podman is not available. AWS integration tests cannot run.")
+        sys.exit(1)
 
     # Check if aws CLI is available
     try:
@@ -888,11 +888,11 @@ if __name__ == "__main__":
             ["aws", "--version"], capture_output=True, text=True, check=False
         )
         if result.returncode != 0:
-            print("AWS CLI is not available. Skipping AWS integration tests.")
-            sys.exit(0)
+            print("ERROR: AWS CLI is not available. AWS integration tests cannot run.")
+            sys.exit(1)
     except FileNotFoundError:
-        print("AWS CLI is not available. Skipping AWS integration tests.")
-        sys.exit(0)
+        print("ERROR: AWS CLI is not available. AWS integration tests cannot run.")
+        sys.exit(1)
 
     # Run the tests
     unittest.main(verbosity=2)

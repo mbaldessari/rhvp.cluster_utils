@@ -157,11 +157,11 @@ class VaultTestBase(unittest.TestCase):
         try:
             subprocess.run(["podman", "--version"], capture_output=True, check=True)
         except (subprocess.CalledProcessError, FileNotFoundError):
-            print("Podman is not available. Skipping integration tests.")
-            sys.exit(0)
+            print("ERROR: Podman is not available. Integration tests cannot run.")
+            sys.exit(1)
 
         try:
             subprocess.run(["podman", "info"], capture_output=True, check=True)
         except (subprocess.CalledProcessError, FileNotFoundError):
-            print("Podman is not running. Skipping integration tests.")
-            sys.exit(0)
+            print("ERROR: Podman is not running. Integration tests cannot run.")
+            sys.exit(1)
