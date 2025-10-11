@@ -32,7 +32,7 @@ jobs:
           pip install pytest ansible-core=='${{ matrix.ansible-core }}'
           pip install -r ansible_collections/rhvp/cluster_utils/tests/integration/requirements.txt
 
-      - name: Run make ansible-unittest
+      - name: Run make integration-test-all
         run: |
           cd ansible_collections/rhvp/cluster_utils
           make integration-test-all
