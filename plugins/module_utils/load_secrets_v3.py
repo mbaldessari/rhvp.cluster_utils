@@ -573,15 +573,10 @@ class SecretsV3Base:
             case "file":
                 expanded_path = os.path.expanduser(param)
                 try:
-                    # Auto-detect binary files and handle accordingly
-                    if self._is_binary_file(expanded_path):
-                        with open(expanded_path, "rb") as f:
-                            binary_content = f.read()
-                        return base64.b64encode(binary_content).decode("utf-8")
-                    else:
-                        with open(expanded_path, "r") as f:
-                            text_content = f.read().strip()
-                        return text_content
+                    # Always read as text file - use file+base64:// for binary files
+                    with open(expanded_path, "r") as f:
+                        text_content = f.read().strip()
+                    return text_content
                 except Exception as e:
                     raise Exception(f"Error reading file {param}: {str(e)}")
             case "file_base64":
@@ -610,12 +605,6 @@ class SecretsV3Base:
                 return None
             case _:
                 raise Exception(f"Unknown field type: {field_type}")
-
-    def _is_binary_file(self, filepath: str) -> bool:
-        """Check if a file is binary (should be base64 encoded)"""
-        binary_extensions = {".crt", ".pem", ".key", ".p12", ".pfx", ".der", ".cer"}
-        _, ext = os.path.splitext(filepath.lower())  # pylint: disable=disallowed-name
-        return ext in binary_extensions
 
     def _parse_ini_spec(self, ini_spec: str) -> Tuple[str, str, str]:
         """
