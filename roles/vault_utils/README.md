@@ -30,7 +30,9 @@ vault_base_path: "secret"
 vault_path: "{{ vault_base_path }}/{{ vault_hub }}"
 vault_hub_ttl: "15m"
 vault_pki_max_lease_ttl: "8760h"
+# "external-secrets" is the namespace when using the downstream openshift-external-secrets chart
 external_secrets_ns: golang-external-secrets
+# "external-secrets" is the service account name when using the downstream openshift-external-secrets chart
 external_secrets_sa: golang-external-secrets
 unseal_secret: "vaultkeys"
 unseal_namespace: "imperative"
@@ -46,9 +48,9 @@ This relies on [kubernetes.core](https://docs.ansible.com/ansible/latest/collect
 This role configures four secret paths in vault:
 
 1. `secret/global` - Any secret under this path is accessible in read-only only to all clusters known to ACM (hub and spokes)
-2. `secret/hub` - Any secret under this path is accessible in read-only only to the ACM hub cluster
-3. `secret/<fqdn.of.spoke.cluster>` - Any secret under this path is accessible in read-only only to the spoke cluster
-4. `secret/pushsecrets` - Any secret here can be accessed in read and write mode to all clusters known to ACM. This area can
+1. `secret/hub` - Any secret under this path is accessible in read-only only to the ACM hub cluster
+1. `secret/<fqdn.of.spoke.cluster>` - Any secret under this path is accessible in read-only only to the spoke cluster
+1. `secret/pushsecrets` - Any secret here can be accessed in read and write mode to all clusters known to ACM. This area can
    be used with ESO's `PushSecrets` so you can push an existing secret from one namespace, to the vault under this path and
    then it can be retrieved by an `ExternalSecret` either in a different namespace *or* from an entirely different cluster.
 
@@ -228,10 +230,10 @@ files.region2:
 Here is the rough high-level algorithm used to unseal the vault:
 
 1. Check vault status. If vault is not initialized go to 2. If initialized go to 3.
-2. Initialize vault and store unseal keys + login token inside a secret in k8s
-3. Check vault status. If vault is unsealed go to 5. else to to 4.
-4. Unseal the vault using the secrets read from the k8s secret
-5. Configure the vault (should be idempotent)
+1. Initialize vault and store unseal keys + login token inside a secret in k8s
+1. Check vault status. If vault is unsealed go to 5. else to to 4.
+1. Unseal the vault using the secrets read from the k8s secret
+1. Configure the vault (should be idempotent)
 
 ## License
 
