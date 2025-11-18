@@ -124,8 +124,12 @@ def run(module):
     elif version == "2.0":
         parsed_secret_obj = ParseSecretsV2(module, syaml, secrets_backing_store)
     else:
-        module.fail_json(f"Unsupported secrets file version: {version}. Only versions 2.0 and 3.0 are supported.")
+        module.fail_json(
+            f"Unsupported secrets file version: {version}. Only versions 2.0 and 3.0 are supported."
+        )
+        return  # This line will never be reached, but helps pylint understand the control flow
 
+    # pylint: disable=used-before-assignment
     parsed_secret_obj.parse()
 
     results["failed"] = False

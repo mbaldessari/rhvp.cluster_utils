@@ -16,19 +16,16 @@
 """
 Module that implements V3 parsing of the values-secret.yaml spec for the parse_secrets_info module
 """
+
 from __future__ import absolute_import, division, print_function
 
 __metaclass__ = type
 
-import base64
-import os
-from typing import Any, Dict, List, Optional, Union
+from typing import Dict, Union
 
 from ansible_collections.rhvp.cluster_utils.plugins.module_utils.load_secrets_common import (
     find_dupes,
-    get_ini_value,
     get_version,
-    stringify_dict,
 )
 
 # Default password policies for V3
@@ -113,7 +110,9 @@ class ParseSecretsV3:
             if charset in CHARSET_MAPPINGS:
                 charset_rules = []
                 for rule_type, chars in CHARSET_MAPPINGS[charset].items():
-                    charset_rules.append(f'rule "charset" {{ charset = "{chars}" min-chars = 1 }}')
+                    charset_rules.append(
+                        f'rule "charset" {{ charset = "{chars}" min-chars = 1 }}'
+                    )
 
                 return f"length={length}\n" + "\n".join(charset_rules)
             else:
@@ -155,7 +154,9 @@ class ParseSecretsV3:
             "stringData": {},
         }
 
-    def _process_secret_field(self, secret_name, field_name, field_value, secret_targets):
+    def _process_secret_field(
+        self, secret_name, field_name, field_value, secret_targets
+    ):
         """Process a single secret field from V3 format"""
         field_info = {
             "name": field_name,
@@ -179,14 +180,18 @@ class ParseSecretsV3:
 
     def _inject_field_v3(self, secret_name, field_name, field_value, secret_targets):
         """Inject a field using V3 logic"""
-        field_info = self._process_secret_field(secret_name, field_name, field_value, secret_targets)
+        field_info = self._process_secret_field(
+            secret_name, field_name, field_value, secret_targets
+        )
 
         if field_info.get("onMissingValue") == "generate":
             # Handle generated secrets
             self.parsed_secrets[secret_name]["generate"].append(field_name)
             self.parsed_secrets[secret_name]["fields"][field_name] = None
             vault_policy = field_info.get("vaultPolicy", "basic")
-            self.parsed_secrets[secret_name]["vault_policies"][field_name] = vault_policy
+            self.parsed_secrets[secret_name]["vault_policies"][
+                field_name
+            ] = vault_policy
         else:
             # Handle regular secrets
             self.parsed_secrets[secret_name]["fields"][field_name] = str(field_value)
@@ -244,7 +249,9 @@ class ParseSecretsV3:
                 if field_name == "targets":
                     continue  # Skip the targets metadata
 
-                self._inject_field_v3(secret_name, field_name, field_value, secret_targets)
+                self._inject_field_v3(
+                    secret_name, field_name, field_value, secret_targets
+                )
 
             # Create Kubernetes secrets if needed
             if backing_store == "kubernetes":
@@ -253,9 +260,7 @@ class ParseSecretsV3:
                 k8s_namespaces = []
 
             for tns in k8s_namespaces:
-                k8s_secret = self._create_k8s_secret(
-                    secret_name, "Opaque", tns, {}, {}
-                )
+                k8s_secret = self._create_k8s_secret(secret_name, "Opaque", tns, {}, {})
                 k8s_secret["stringData"] = self.parsed_secrets[secret_name]["fields"]
                 self.kubernetes_secret_objects.append(k8s_secret)
 
@@ -291,6 +296,10 @@ class ParseSecretsV3:
             # Validate targets if present
             if "targets" in secret_data:
                 if not isinstance(secret_data["targets"], list):
-                    self.module.fail_json(f"Secret '{secret_name}' targets must be a list")
+                    self.module.fail_json(
+                        f"Secret '{secret_name}' targets must be a list"
+                    )
                 if len(secret_data["targets"]) == 0:
-                    self.module.fail_json(f"Secret '{secret_name}' targets cannot be empty")
+                    self.module.fail_json(
+                        f"Secret '{secret_name}' targets cannot be empty"
+                    )

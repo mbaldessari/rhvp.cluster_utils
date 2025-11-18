@@ -168,7 +168,9 @@ def run(module: AnsibleModule) -> None:
         secret_obj = LoadSecretsV2(module, syaml, namespace, pod)
     else:
         secret_obj = None
-        module.fail_json(f"Unsupported version {version}. Only versions 2.0 and 3.0 are supported.")
+        module.fail_json(
+            f"Unsupported version {version}. Only versions 2.0 and 3.0 are supported."
+        )
 
     secret_obj.sanitize_values()
     nr_secrets = secret_obj.inject_secrets()
