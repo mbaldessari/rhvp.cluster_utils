@@ -114,9 +114,13 @@ import traceback
 from ansible.module_utils.basic import AnsibleModule, missing_required_lib
 from ansible_collections.rhvp.cluster_utils.plugins.module_utils.load_secrets_common import (
     filter_module_args,
+    get_version,
 )
 from ansible_collections.rhvp.cluster_utils.plugins.module_utils.parse_secrets_v2 import (
     ParseSecretsV2,
+)
+from ansible_collections.rhvp.cluster_utils.plugins.module_utils.parse_secrets_v3 import (
+    ParseSecretsV3,
 )
 
 try:
@@ -142,7 +146,16 @@ def run(module):
     if syaml is None:
         syaml = {}
 
-    parsed_secret_obj = ParseSecretsV2(module, syaml, secrets_backing_store)
+    # Detect version and use appropriate parser
+    version = get_version(syaml)
+
+    if version == "3.0":
+        parsed_secret_obj = ParseSecretsV3(module, syaml, secrets_backing_store)
+    elif version == "2.0":
+        parsed_secret_obj = ParseSecretsV2(module, syaml, secrets_backing_store)
+    else:
+        module.fail_json(f"Unsupported secrets file version: {version}. Only versions 2.0 and 3.0 are supported.")
+
     parsed_secret_obj.parse()
 
     results["failed"] = False
