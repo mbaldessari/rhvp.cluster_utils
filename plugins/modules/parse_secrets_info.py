@@ -14,40 +14,10 @@
 # under the License.
 
 """
-Ansible plugin module that loads secrets from a yaml file and pushes them
-inside the HashiCorp Vault in an OCP cluster. The values-secrets.yaml file is
-expected to be in the following format:
----
-# version is optional. When not specified it is assumed it is 1.0
-version: 1.0
+Ansible plugin module that parses secrets from a yaml file for later loading
+into various backends.
 
-# These secrets will be pushed in the vault at secret/hub/test The vault will
-# have secret/hub/test with secret1 and secret2 as keys with their associated
-# values (secrets)
-secrets:
-  test:
-    secret1: foo
-    secret2: bar
-
-# This will create the vault key secret/hub/testfoo which will have two
-# properties 'b64content' and 'content' which will be the base64-encoded
-# content and the normal content respectively
-files:
-  testfoo: ~/ca.crt
-
-# These secrets will be pushed in the vault at secret/region1/test The vault will
-# have secret/region1/test with secret1 and secret2 as keys with their associated
-# values (secrets)
-secrets.region1:
-  test:
-    secret1: foo1
-    secret2: bar1
-
-# This will create the vault key secret/region2/testbar which will have two
-# properties 'b64content' and 'content' which will be the base64-encoded
-# content and the normal content respectively
-files.region2:
-  testbar: ~/ca.crt
+Supports versions 2.0 and 3.0 of the values-secrets.yaml format.
 """
 
 from __future__ import absolute_import, division, print_function

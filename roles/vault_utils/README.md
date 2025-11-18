@@ -56,11 +56,11 @@ This role configures four secret paths in vault:
 
 ## Values secret file format
 
-Currently this role supports three formats: version 1.0 (which is the assumed
-default when not specified), version 2.0, and version 3.0. Version 2.0 is more
-featureful and supports generating secrets directly into the vault and also prompting
-the user for a secret. Version 3.0 provides a simplified syntax with instruction-based
-field definitions and improved policy management.
+Currently this role supports two formats: version 2.0 (which is the default
+when not specified) and version 3.0. Version 2.0 supports generating secrets
+directly into the vault and prompting the user for secrets. Version 3.0 provides
+a simplified syntax with instruction-based field definitions and improved policy
+management.
 
 By default, the first file that will looked up is
 `~/.config/hybrid-cloud-patterns/values-secret-<patternname>.yaml`, then
@@ -373,7 +373,7 @@ Here is a version 2.0 example file (specifying `version: 2.0` is mandatory in th
 # NEVER COMMIT THESE VALUES TO GIT (unless your file only uses generated
 # passwords or only points to files)
 
-# Needed to specify the new format (missing version means old version: 1.0 by default)
+# Version 2.0 is the default when version is not specified
 version: 2.0
 
 secretstore: vault # 'vault' is the default when omitted
@@ -478,45 +478,6 @@ secrets:
       ini_key: aws_secret_access_key
 ```
 
-### Version 1.0
-
-Here is a well-commented example of a version 1.0 file:
-
-```yaml
----
-# By default when a top-level 'version: 1.0' is missing it is assumed to be '1.0'
-# NEVER COMMIT THESE VALUES TO GIT
-
-secrets:
-  # These secrets will be pushed in the vault at secret/hub/test The vault will
-  # have secret/hub/test with secret1 and secret2 as keys with their associated
-  # values (secrets)
-  test:
-    secret1: foo
-    secret2: bar
-
-  # This ends up as the s3Secret attribute to the path secret/hub/aws
-  aws:
-    s3Secret: test-secret
-
-# This will create the vault key secret/hub/testfoo which will have two
-# properties 'b64content' and 'content' which will be the base64-encoded
-# content and the normal content respectively
-files:
-  testfoo: ~/ca.crt
-# These secrets will be pushed in the vault at secret/region1/test The vault will
-# have secret/region1/test with secret1 and secret2 as keys with their associated
-# values (secrets)
-secrets.region1:
-  test:
-    secret1: foo1
-    secret2: bar1
-# This will create the vault key secret/region2/testbar which will have two
-# properties 'b64content' and 'content' which will be the base64-encoded
-# content and the normal content respectively
-files.region2:
-  testbar: ~/ca.crt
-```
 
 ### Internals
 

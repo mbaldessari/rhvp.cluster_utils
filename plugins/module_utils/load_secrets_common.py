@@ -59,12 +59,12 @@ def find_dupes(array):
 def get_version(syaml):
     """
     Return the version: of the parsed yaml object. If it does not exist
-    return 1.0
+    return 2.0
 
     Returns:
         ret(str): The version value in of the top-level 'version:' key
     """
-    return str(syaml.get("version", "1.0"))
+    return str(syaml.get("version", "2.0"))
 
 
 def flatten(dictionary, parent_key=False, separator="."):

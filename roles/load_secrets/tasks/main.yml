@@ -30,6 +30,11 @@
     secrets_backing_store: "{{ secrets_backing_store }}"
   register: secrets_results
 
+- name: Set default secrets loader (vault)
+  ansible.builtin.set_fact:
+    secrets_role: "vault_utils"
+    tasks_from: "push_parsed_secrets"
+
 - name: Select Kubernetes secrets loader (when requested)
   ansible.builtin.set_fact:
     secrets_role: "k8s_secret_utils"

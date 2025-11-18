@@ -292,7 +292,7 @@ rule "charset" { charset = "0123456789" min-chars = 1 }"""
 
     def test_convert_file_invalid_version(self):
         """Test error handling for invalid version"""
-        v2_data = {"version": "1.0", "secrets": []}  # Wrong version
+        v2_data = {"version": "1.5", "secrets": []}  # Wrong version
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             yaml.dump(v2_data, f)
