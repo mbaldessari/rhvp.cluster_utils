@@ -23,6 +23,13 @@
   ansible.builtin.set_fact:
     secrets_yaml: "{{ values_secrets_data | from_yaml }}"
 
+- name: Override secrets backing store for V3 format
+  ansible.builtin.set_fact:
+    secrets_backing_store: "{{ secrets_yaml.secretstore }}"
+  when:
+    - (secrets_yaml.version | default('2.0')) is version('3.0', '>=')
+    - secrets_yaml.secretstore is defined
+
 - name: Parse secrets data
   no_log: "{{ hide_sensitive_output | default(true) }}"
   parse_secrets_info:
@@ -43,6 +50,14 @@
     - secrets_backing_store in ["kubernetes", "none"]
     - (secrets_yaml.version | default('2.0')) is version('2.0', '>=')
 
+- name: Load secrets into AWS Secrets Manager
+  no_log: "{{ hide_sensitive_output | default(true) }}"
+  vault_load_secrets:
+    values_secrets_plaintext: "{{ values_secrets_data }}"
+  when:
+    - secrets_backing_store == "aws-secrets-manager"
+    - (secrets_yaml.version | default('2.0')) is version('3.0', '>=')
+
 - name: Load secrets using designated role and tasks
   ansible.builtin.include_role:
     name: "{{ secrets_role }}"
@@ -51,3 +66,5 @@
     kubernetes_secret_objects: "{{ secrets_results.kubernetes_secret_objects }}"
     vault_policies: "{{ secrets_results.vault_policies }}"
     parsed_secrets: "{{ secrets_results.parsed_secrets }}"
+  when:
+    - secrets_backing_store != "aws-secrets-manager"
