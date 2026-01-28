@@ -266,6 +266,22 @@ class ParseSecretsV3:
 
         return total_secrets
 
+    def get_unique_vault_prefixes(self):
+        """
+        Extract all unique vault prefixes from parsed secrets.
+
+        In V3, targets become vault prefixes. This is useful for creating
+        fine-grained Vault policies for each unique prefix path.
+
+        Returns:
+            list: Sorted list of unique vault prefixes
+        """
+        prefixes = set()
+        for secret in self.parsed_secrets.values():
+            for prefix in secret.get("vault_prefixes", []):
+                prefixes.add(prefix)
+        return sorted(list(prefixes))
+
     def sanitize_values(self):
         """Validate the V3 secrets file structure"""
         version = get_version(self.syaml)
