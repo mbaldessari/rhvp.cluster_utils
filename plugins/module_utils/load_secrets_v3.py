@@ -1187,6 +1187,7 @@ class LoadSecretsV3AWS(SecretsV3Base):
     ) -> bool:
         """Create secret using AWS CLI"""
         import json
+        import shlex
 
         # Prepare secret value as JSON
         secret_value = json.dumps(secret_data)
@@ -1197,14 +1198,14 @@ class LoadSecretsV3AWS(SecretsV3Base):
         profile = aws_config.get("profile")
 
         cmd_parts = ["aws", "secretsmanager", "create-secret"]
-        cmd_parts.extend(["--name", secret_name])
-        cmd_parts.extend(["--secret-string", secret_value])
+        cmd_parts.extend(["--name", shlex.quote(secret_name)])
+        cmd_parts.extend(["--secret-string", shlex.quote(secret_value)])
 
         if description:
-            cmd_parts.extend(["--description", description])
+            cmd_parts.extend(["--description", shlex.quote(description)])
 
         if kms_key_id:
-            cmd_parts.extend(["--kms-key-id", kms_key_id])
+            cmd_parts.extend(["--kms-key-id", shlex.quote(kms_key_id)])
 
         if region:
             cmd_parts.extend(["--region", region])
@@ -1215,7 +1216,7 @@ class LoadSecretsV3AWS(SecretsV3Base):
         # Add tags if provided
         if tags:
             for key, value in tags.items():
-                cmd_parts.extend(["--tags", f"Key={key},Value={value}"])
+                cmd_parts.extend(["--tags", f"Key={shlex.quote(key)},Value={shlex.quote(value)}"])
 
         # Add replication regions if configured
         replication_regions = aws_config.get("replicationRegions", [])
@@ -1229,8 +1230,8 @@ class LoadSecretsV3AWS(SecretsV3Base):
             cmd_parts.extend(["--replica-regions", ",".join(replica_regions)])
 
         # Execute command
-        cmd = " ".join([f'"{part}"' if " " in part else part for part in cmd_parts])
-        result = self.module.run_command(cmd, check_rc=False)
+        cmd = " ".join(cmd_parts)
+        result = self.module.run_command(cmd, check_rc=False, use_unsafe_shell=True)
 
         if result[0] != 0:
             # Check if secret already exists
@@ -1263,14 +1264,15 @@ class LoadSecretsV3AWS(SecretsV3Base):
     ) -> bool:
         """Update an existing secret"""
         import json
+        import shlex
 
         secret_value = json.dumps(secret_data)
         cmd_parts = ["aws", "secretsmanager", "update-secret"]
-        cmd_parts.extend(["--secret-id", secret_name])
-        cmd_parts.extend(["--secret-string", secret_value])
+        cmd_parts.extend(["--secret-id", shlex.quote(secret_name)])
+        cmd_parts.extend(["--secret-string", shlex.quote(secret_value)])
 
         if description:
-            cmd_parts.extend(["--description", description])
+            cmd_parts.extend(["--description", shlex.quote(description)])
 
         if region:
             cmd_parts.extend(["--region", region])
@@ -1278,8 +1280,8 @@ class LoadSecretsV3AWS(SecretsV3Base):
         if profile:
             cmd_parts.extend(["--profile", profile])
 
-        cmd = " ".join([f'"{part}"' if " " in part else part for part in cmd_parts])
-        result = self.module.run_command(cmd, check_rc=False)
+        cmd = " ".join(cmd_parts)
+        result = self.module.run_command(cmd, check_rc=False, use_unsafe_shell=True)
 
         return result[0] == 0
 
@@ -1291,12 +1293,14 @@ class LoadSecretsV3AWS(SecretsV3Base):
         profile: Optional[str],
     ) -> None:
         """Configure automatic rotation for a secret"""
+        import shlex
+
         cmd_parts = ["aws", "secretsmanager", "rotate-secret"]
-        cmd_parts.extend(["--secret-id", secret_name])
+        cmd_parts.extend(["--secret-id", shlex.quote(secret_name)])
 
         if "rotationLambdaArn" in rotation_config:
             cmd_parts.extend(
-                ["--rotation-lambda-arn", rotation_config["rotationLambdaArn"]]
+                ["--rotation-lambda-arn", shlex.quote(rotation_config["rotationLambdaArn"])]
             )
 
         if "rotationSchedule" in rotation_config:
@@ -1313,8 +1317,8 @@ class LoadSecretsV3AWS(SecretsV3Base):
         if profile:
             cmd_parts.extend(["--profile", profile])
 
-        cmd = " ".join([f'"{part}"' if " " in part else part for part in cmd_parts])
-        result = self.module.run_command(cmd, check_rc=False)
+        cmd = " ".join(cmd_parts)
+        result = self.module.run_command(cmd, check_rc=False, use_unsafe_shell=True)
 
         if result[0] != 0:
             self.module.fail_json(
