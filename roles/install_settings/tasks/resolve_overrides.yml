@@ -83,7 +83,7 @@
       {{
         target_clustergroup
           | default(lookup("env", "TARGET_CLUSTERGROUP"), true)
-          | default(main_clustergroup, true)
+          | default(main_variant, true)
           | trim
       }}
 
