@@ -2,9 +2,40 @@
 - name: Resolve defaults with ansible var/env var overrides
   ansible.builtin.import_tasks: resolve_overrides.yml
 
+- name: Find all possible values-global.yaml files in values subdirectories
+  ansible.builtin.find:
+    paths: "{{ pattern_dir }}/values"
+    patterns: "values-global.yaml"
+    recurse: true
+    file_type: file
+  register: values_global_find_result
+  ignore_errors: true
+
+- name: Set values-global.yaml search paths
+  ansible.builtin.set_fact:
+    values_global_search_paths: >-
+      {{
+        (["{{ pattern_dir }}/values-global.yaml"] +
+         (values_global_find_result.files | default([]) | map(attribute='path') | list) +
+         ["{{ pattern_dir }}/values/values-global.yaml"]) | unique
+      }}
+
+- name: Find first existing values-global.yaml file
+  ansible.builtin.set_fact:
+    values_global_file: "{{ lookup('ansible.builtin.first_found', values_global_search_paths, skip=true) }}"
+
+- name: Ensure values-global.yaml file was found
+  ansible.builtin.assert:
+    that:
+      - values_global_file is defined
+      - values_global_file | default('') | length > 0
+    fail_msg: >-
+      No values-global.yaml file could be found. Searched:
+      {{ values_global_search_paths | join(', ') }}.
+
 - name: Load values-global.yaml
   ansible.builtin.set_fact:
-    values_global: "{{ lookup('file', pattern_dir + '/values-global.yaml') | from_yaml }}"
+    values_global: "{{ lookup('file', values_global_file) | from_yaml }}"
 
 - name: Ensure .global.pattern is set
   ansible.builtin.assert:

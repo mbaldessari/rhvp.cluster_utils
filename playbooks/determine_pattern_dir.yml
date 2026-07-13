@@ -16,5 +16,6 @@
       ansible.builtin.fail:
         msg: >-
           Could not resolve pattern_dir. Set -e pattern_dir=/path/to/pattern, export PATTERN_DIR,
-          or run from your pattern repository so PWD / pwd points at the directory that contains values-global.yaml.
+          or run from your pattern repository so PWD / pwd points at the directory that contains values-global.yaml
+          (either in the root directory or in ./values/values-global.yaml).
       when: pattern_dir | default('', true) | string | trim | length == 0
