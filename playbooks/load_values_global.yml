@@ -12,23 +12,11 @@
       ansible.builtin.set_fact:
         pattern_dir: '{{ pattern_dir }}'
 
-    - name: Find all possible values-global.yaml files in values subdirectories
-      ansible.builtin.find:
-        paths: "{{ pattern_dir }}/values"
-        patterns: "values-global.yaml"
-        recurse: true
-        file_type: file
-      register: values_global_find_result
-      ignore_errors: true
-
     - name: Set values-global.yaml search paths
       ansible.builtin.set_fact:
-        values_global_search_paths: >-
-          {{
-            (["{{ pattern_dir }}/values-global.yaml"] +
-             (values_global_find_result.files | default([]) | map(attribute='path') | list) +
-             ["{{ pattern_dir }}/values/values-global.yaml"]) | unique
-          }}
+        values_global_search_paths:
+          - "{{ pattern_dir }}/values-global.yaml"
+          - "{{ pattern_dir }}/values/values-global.yaml"
 
     - name: Find first existing values-global.yaml file
       ansible.builtin.set_fact:
